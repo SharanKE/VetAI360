@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: vetai360
+    env: node
+    plan: free
+    buildCommand: npm run build
+    startCommand: npm run start:prod
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: JWT_SECRET
+        generateValue: true
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: DB_TYPE
+        value: sqlite

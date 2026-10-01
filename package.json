@@ -1,0 +1,30 @@
+{
+  "name": "vetai360",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "start": "npm run dev",
+    "build": "npm --prefix backend install && npm --prefix frontend install && npm --prefix frontend run build",
+    "start:prod": "node backend/server.js",
+    "install:all": "npm install && npm install --prefix backend && npm install --prefix frontend",
+    "seed": "npm --prefix backend run seed",
+    "seed:mongo": "npm --prefix backend run seed:mongo",
+    "dev": "concurrently -n backend,frontend,ml -c blue,green,magenta \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\" \"npm run dev:ml\"",
+    "dev:mongo": "concurrently -n backend,frontend,ml -c blue,green,magenta \"npm --prefix backend run dev:mongo\" \"npm --prefix frontend run dev\" \"npm run dev:ml\"",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:ml": "node scripts/run-ml.js",
+    "start:backend": "npm --prefix backend start",
+    "start:frontend": "npm --prefix frontend run dev",
+    "docker:up": "docker compose up --build",
+    "docker:down": "docker compose down",
+    "docker:prod": "docker compose -f docker-compose.prod.yml --env-file .env.prod up --build",
+    "setup:atlas": "node scripts/setup-atlas.js",
+    "setup:atlas:seed": "node scripts/setup-atlas.js --seed",
+    "db:backup": "node scripts/backup-db.js backup",
+    "db:restore": "node scripts/backup-db.js restore"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  }
+}

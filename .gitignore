@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+dist/
+frontend/dist/
+backend/node_modules/
+frontend/node_modules/
+backups/
+
+# Environment files
+.env
+.env.prod
+backend/.env
+frontend/.env
+
+# Local data and model artifacts
+backend/data/
+ml-service/.venv/
+ml-service/models/
+*.db
+*.sqlite
+*.sqlite3
+
+# Python
+__pycache__/
+*.py[cod]
+
+# OS/editor
+.DS_Store
+.vscode/
