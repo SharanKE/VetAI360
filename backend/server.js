@@ -41,33 +41,8 @@ if (process.env.NODE_ENV === "production") {
   app.set("trust proxy", 1);
 }
 
-function parseAllowedOrigins() {
-  const raw = process.env.CLIENT_ORIGIN || "http://localhost:5173";
-  return raw
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
-const allowedOrigins = parseAllowedOrigins();
-
-function isAllowedOrigin(origin) {
-  if (!origin) return true;
-  if (allowedOrigins.includes(origin)) return true;
-  if (process.env.ALLOW_RENDER_ORIGINS === "true" && origin.endsWith(".onrender.com")) return true;
-  // Allow any localhost origin during development
-  if (process.env.NODE_ENV !== "production" && origin.startsWith("http://localhost")) return true;
-  return false;
-}
-
 const corsOptions = {
-  origin(origin, callback) {
-    if (isAllowedOrigin(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error(`Origin ${origin} not allowed by CORS`));
-    }
-  },
+  origin: true,
   credentials: true,
 };
 
