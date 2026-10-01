@@ -141,8 +141,43 @@ async function boot() {
     await connectMongo();
   }
 
-  server.listen(PORT, () => {
-    console.log(`\nVetAI 360 API listening on port ${PORT} (${process.env.NODE_ENV || "development"})`);
+  // Auto-seed demo accounts on initial boot if empty
+  try {
+    const User = require("./models/User");
+    const adminUser = await User.findByEmail("admin@vetai360.dev");
+    if (!adminUser) {
+      console.log("Database empty — auto-seeding demo accounts & livestock data...");
+      const bcrypt = require("bcryptjs");
+      const Animal = require("./models/Animal");
+      const Vaccination = require("./models/Vaccination");
+      const HealthRecord = require("./models/HealthRecord");
+      const { toId } = require("./utils/id");
+
+      const admin = await User.create({ name: "Platform Admin", email: "admin@vetai360.dev", passwordHash: bcrypt.hashSync("admin123", 10), role: "admin", phone: "+91 90000 00001" });
+      const farmer = await User.create({ name: "Ramesh Gowda", email: "farmer@vetai360.dev", passwordHash: bcrypt.hashSync("farmer123", 10), role: "farmer", phone: "+91 90000 00002" });
+      const vet = await User.create({ name: "Dr. Arpitha J C", email: "vet@vetai360.dev", passwordHash: bcrypt.hashSync("vet123", 10), role: "vet", phone: "+91 90000 00003", specialty: "Large Animal Medicine" });
+      
+      const farmerId = toId(farmer.id ?? farmer._id);
+      const vetId = toId(vet.id ?? vet._id);
+      await User.setVerified(vetId, true);
+
+      const cow = await Animal.create({ ownerId: farmerId, name: "Ganga", species: "Cattle", breed: "Gir", gender: "Female", ageMonths: 40, tagId: "IN-KA-0192" });
+      const goat = await Animal.create({ ownerId: farmerId, name: "Motu", species: "Goat", breed: "Osmanabadi", gender: "Male", ageMonths: 14, tagId: "IN-KA-0193" });
+
+      const cowId = toId(cow.id);
+      const goatId = toId(goat.id);
+      await Vaccination.create({ animalId: cowId, vaccineName: "Foot and Mouth Disease (FMD)", dueDate: new Date(Date.now() + 3 * 86400000).toISOString().slice(0,10) });
+      await Vaccination.create({ animalId: goatId, vaccineName: "PPR Vaccine", dueDate: new Date(Date.now() - 2 * 86400000).toISOString().slice(0,10) });
+      await HealthRecord.create({ animalId: cowId, vetId, diagnosis: "Routine checkup — healthy", treatment: "None", notes: "Good body condition score.", source: "manual" });
+      console.log("Auto-seeding complete!");
+    }
+  } catch (seedErr) {
+    console.warn("Auto-seed check notice:", seedErr.message);
+  }
+
+  const HOST = "0.0.0.0";
+  server.listen(PORT, HOST, () => {
+    console.log(`\nVetAI 360 API listening on ${HOST}:${PORT} (${process.env.NODE_ENV || "development"})`);
     sensorSimulator.start(io);
     vaccinationReminder.start(io);
   });
