@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { X, ArrowRight, Check } from "lucide-react";
+import { X, ExternalLink, ShieldCheck, KeyRound, Check } from "lucide-react";
 
 // Official Google Multi-Color G Logo SVG
 export function GoogleIcon({ className = "w-4 h-4" }) {
@@ -27,6 +27,8 @@ export function GoogleIcon({ className = "w-4 h-4" }) {
   );
 }
 
+const DEFAULT_CLIENT_ID = "106746031691-qm6nhqcpujag2bfc3aa9cgals5alh34v.apps.googleusercontent.com";
+
 export default function GoogleAuthButton({
   role = "farmer",
   mode = "signin", // "signin" | "signup"
@@ -34,161 +36,213 @@ export default function GoogleAuthButton({
 }) {
   const { loginWithGoogle } = useAuth();
   const navigate = useNavigate();
-  const [showModal, setShowModal] = useState(false);
-  const [googleEmail, setGoogleEmail] = useState("");
-  const [googleName, setGoogleName] = useState("");
+  const googleBtnRef = useRef(null);
+
+  // 1. Check for real Google Client ID from environment or fallback
+  const envClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || DEFAULT_CLIENT_ID;
+  const [clientId, setClientId] = useState(() => {
+    return localStorage.getItem("vetai360_google_client_id") || envClientId;
+  });
+
+  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [inputClientId, setInputClientId] = useState("");
   const [loading, setLoading] = useState(false);
+  const [gsiLoaded, setGsiLoaded] = useState(false);
 
-  // Common quick Google accounts for one-tap simulation or custom email entry
-  const suggestedAccounts = [
-    {
-      name: "Google User",
-      email: "farmer.google@gmail.com",
-      avatar: "🌾",
-      subtitle: "Personal Google Account",
-    },
-    {
-      name: "Dr. Vet Google",
-      email: "vet.clinic@gmail.com",
-      avatar: "🩺",
-      subtitle: "Professional Google Workspace",
-    },
-  ];
+  // 2. Initialize Real Google Identity Services (GSI)
+  useEffect(() => {
+    if (!clientId) return;
 
-  async function handleGoogleLogin(emailToUse, nameToUse) {
-    setLoading(true);
-    try {
-      await loginWithGoogle({
-        email: emailToUse,
-        name: nameToUse || emailToUse.split("@")[0],
-        role: role || "farmer",
-      });
-      setShowModal(false);
-      navigate("/");
-    } catch (err) {
-      if (onError) {
-        onError(err.message || "Google authentication failed.");
+    function setupGoogleButton() {
+      if (window.google?.accounts?.id && googleBtnRef.current) {
+        try {
+          // Initialize official Google Identity Services
+          window.google.accounts.id.initialize({
+            client_id: clientId,
+            callback: async (response) => {
+              // response.credential is the real, verified Google ID token from accounts.google.com
+              setLoading(true);
+              try {
+                await loginWithGoogle({
+                  credential: response.credential,
+                  role: role || "farmer",
+                });
+                navigate("/");
+              } catch (err) {
+                if (onError) onError(err.message || "Failed to sign in with Google.");
+              } finally {
+                setLoading(false);
+              }
+            },
+            auto_select: false,
+            cancel_on_tap_outside: true,
+          });
+
+          // Render official Google button from Google's secure servers
+          googleBtnRef.current.innerHTML = "";
+          window.google.accounts.id.renderButton(googleBtnRef.current, {
+            type: "standard",
+            theme: "outline",
+            size: "large",
+            width: googleBtnRef.current.parentElement?.offsetWidth || 340,
+            text: mode === "signup" ? "signup_with" : "continue_with",
+            shape: "pill",
+            logo_alignment: "left",
+          });
+
+          setGsiLoaded(true);
+        } catch (err) {
+          console.warn("Failed to render Google button:", err);
+        }
       }
-      setShowModal(false);
-    } finally {
-      setLoading(false);
+    }
+
+    if (window.google?.accounts?.id) {
+      setupGoogleButton();
+    } else {
+      const timer = setInterval(() => {
+        if (window.google?.accounts?.id) {
+          clearInterval(timer);
+          setupGoogleButton();
+        }
+      }, 250);
+      return () => clearInterval(timer);
+    }
+  }, [clientId, mode, role]);
+
+  function handleSaveClientId(e) {
+    e.preventDefault();
+    if (!inputClientId.trim()) return;
+    const cleanId = inputClientId.trim();
+    localStorage.setItem("vetai360_google_client_id", cleanId);
+    setClientId(cleanId);
+    setShowConfigModal(false);
+  }
+
+  function handleButtonClick() {
+    if (!clientId) {
+      setShowConfigModal(true);
+    } else if (window.google?.accounts?.id) {
+      window.google.accounts.id.prompt();
     }
   }
 
-  function handleCustomSubmit(e) {
-    e.preventDefault();
-    if (!googleEmail.trim()) return;
-    handleGoogleLogin(googleEmail.trim(), googleName.trim());
-  }
-
   return (
-    <>
-      {/* ======================================================== */}
-      {/* GOOGLE SIGN IN BUTTON (Clean, Official Styling)          */}
-      {/* ======================================================== */}
-      <button
-        type="button"
-        onClick={() => setShowModal(true)}
-        className="group relative flex w-full items-center justify-center gap-2.5 rounded-xl border border-gray-200 bg-white py-2.5 px-4 text-xs font-semibold text-gray-700 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-gray-300 hover:bg-gray-50/80 hover:shadow-md active:translate-y-0 active:scale-[0.99]"
-      >
-        <GoogleIcon className="h-4 w-4 transition-transform duration-200 group-hover:scale-110" />
-        <span>
-          {mode === "signup" ? "Sign up with Google" : "Continue with Google"}
-        </span>
-      </button>
+    <div className="w-full">
+      {/* -------------------------------------------------------- */}
+      {/* REAL OFFICIAL GOOGLE BUTTON CONTAINER                    */}
+      {/* -------------------------------------------------------- */}
+      <div
+        ref={googleBtnRef}
+        className={`w-full flex justify-center ${clientId ? "" : "hidden"}`}
+      />
 
-      {/* ======================================================== */}
-      {/* GOOGLE ACCOUNT SELECTION MODAL                           */}
-      {/* ======================================================== */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm animate-fade-in">
-          <div className="relative w-full max-w-sm rounded-2xl border border-gray-100 bg-white p-6 shadow-2xl transition-all">
-            {/* Close Button */}
+      {/* Fallback button if Client ID is not yet entered */}
+      {!clientId && (
+        <button
+          type="button"
+          onClick={handleButtonClick}
+          className="group relative flex w-full items-center justify-center gap-2.5 rounded-full border border-gray-200 bg-white py-2.5 px-4 text-xs font-semibold text-gray-700 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-gray-300 hover:bg-gray-50/80 hover:shadow-md active:translate-y-0 active:scale-[0.99]"
+        >
+          <GoogleIcon className="h-4 w-4 transition-transform duration-200 group-hover:scale-110" />
+          <span>
+            {mode === "signup" ? "Sign up with Google" : "Continue with Google"}
+          </span>
+        </button>
+      )}
+
+      {/* -------------------------------------------------------- */}
+      {/* GOOGLE CLOUD OAUTH CONFIGURATION MODAL                   */}
+      {/* -------------------------------------------------------- */}
+      {showConfigModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm animate-fade-in">
+          <div className="relative w-full max-w-md rounded-2xl border border-gray-100 bg-white p-6 shadow-2xl transition-all">
             <button
               type="button"
-              onClick={() => setShowModal(false)}
+              onClick={() => setShowConfigModal(false)}
               className="absolute right-3.5 top-3.5 rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition"
             >
               <X size={16} />
             </button>
 
-            {/* Modal Header */}
-            <div className="text-center mb-5">
-              <div className="mx-auto mb-2.5 flex h-10 w-10 items-center justify-center rounded-xl bg-gray-50 border border-gray-200">
-                <GoogleIcon className="h-5 w-5" />
+            <div className="text-center mb-4">
+              <div className="mx-auto mb-2 flex h-11 w-11 items-center justify-center rounded-2xl bg-gray-50 border border-gray-200 shadow-sm">
+                <GoogleIcon className="h-6 w-6" />
               </div>
               <h3 className="font-display text-base font-bold text-gray-900">
-                Sign in with Google
+                Connect Real Google Sign-In
               </h3>
-              <p className="mt-0.5 text-xs text-gray-500">
-                Choose an account to continue to <span className="font-semibold text-gray-700">VetAI 360</span>
+              <p className="mt-1 text-xs text-gray-500 leading-relaxed">
+                To sign in through your <strong>real Google account</strong> (`accounts.google.com`), Google security requires a free OAuth 2.0 Web Client ID.
               </p>
             </div>
 
-            {/* Quick Suggested Accounts */}
-            <div className="space-y-2 mb-4">
-              {suggestedAccounts.map((acc) => (
-                <button
-                  key={acc.email}
-                  type="button"
-                  onClick={() => handleGoogleLogin(acc.email, acc.name)}
-                  disabled={loading}
-                  className="group flex w-full items-center gap-3 rounded-xl border border-gray-200 bg-white p-2.5 text-left transition-all hover:-translate-y-0.5 hover:border-pasture-400 hover:bg-pasture-50/20 hover:shadow-sm"
-                >
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-lg group-hover:scale-105 transition-transform">
-                    {acc.avatar}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-gray-900 truncate">
-                      {acc.name}
-                    </p>
-                    <p className="text-[11px] text-gray-500 truncate">{acc.email}</p>
-                  </div>
-                  <ArrowRight
-                    size={14}
-                    className="text-gray-400 group-hover:text-pasture-700 group-hover:translate-x-1 transition-all"
+            <div className="rounded-xl bg-pasture-50/70 border border-pasture-200 p-3.5 text-xs text-pasture-900 space-y-1.5 mb-4">
+              <p className="font-bold flex items-center gap-1.5 text-pasture-800">
+                <ShieldCheck size={14} className="text-pasture-600" />
+                How to get your free Google Client ID (2 mins):
+              </p>
+              <ol className="list-decimal pl-4 space-y-1 text-[11px] text-pasture-800/90 leading-tight">
+                <li>
+                  Open{" "}
+                  <a
+                    href="https://console.cloud.google.com/apis/credentials"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-bold underline text-pasture-900 inline-flex items-center gap-0.5"
+                  >
+                    Google Cloud Console <ExternalLink size={10} />
+                  </a>
+                </li>
+                <li>Click <strong>Create Credentials</strong> → <strong>OAuth client ID</strong></li>
+                <li>Select <strong>Web application</strong></li>
+                <li>
+                  Add Authorized JavaScript origin:{" "}
+                  <code className="bg-pasture-100 px-1 py-0.5 rounded text-[10px] font-mono">
+                    {window.location.origin}
+                  </code>
+                </li>
+                <li>Copy the generated <strong>Client ID</strong> and paste below:</li>
+              </ol>
+            </div>
+
+            <form onSubmit={handleSaveClientId} className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-700 mb-1">
+                  Google OAuth 2.0 Client ID:
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={inputClientId}
+                    onChange={(e) => setInputClientId(e.target.value)}
+                    placeholder="xxxxxxxxxxxx-xxxxxxxxxxxxxxxx.apps.googleusercontent.com"
+                    required
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-xs text-gray-900 font-mono outline-none transition placeholder:text-gray-400 focus:border-pasture-500 focus:ring-2 focus:ring-pasture-100"
                   />
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowConfigModal(false)}
+                  className="w-1/3 rounded-xl border border-gray-200 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition"
+                >
+                  Cancel
                 </button>
-              ))}
-            </div>
-
-            {/* Divider */}
-            <div className="relative my-4 flex items-center justify-center">
-              <div className="w-full border-t border-gray-200" />
-              <span className="absolute bg-white px-2 text-[10px] uppercase font-bold text-gray-400">
-                Or enter Google email
-              </span>
-            </div>
-
-            {/* Custom Google Email Entry */}
-            <form onSubmit={handleCustomSubmit} className="space-y-2.5">
-              <input
-                type="email"
-                value={googleEmail}
-                onChange={(e) => setGoogleEmail(e.target.value)}
-                placeholder="your.email@gmail.com"
-                required
-                className="w-full rounded-xl border border-gray-200 px-3 py-2 text-xs text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-pasture-500 focus:ring-2 focus:ring-pasture-100"
-              />
-              <button
-                type="submit"
-                disabled={loading || !googleEmail.trim()}
-                className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-pasture-700 hover:bg-pasture-800 py-2 text-xs font-semibold text-white transition active:scale-[0.99] disabled:opacity-50"
-              >
-                {loading ? (
-                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                ) : (
-                  <span>Continue</span>
-                )}
-              </button>
+                <button
+                  type="submit"
+                  disabled={!inputClientId.trim()}
+                  className="flex-1 rounded-xl bg-pasture-700 hover:bg-pasture-800 py-2 text-xs font-semibold text-white transition active:scale-[0.99] disabled:opacity-50"
+                >
+                  Activate Real Google Login
+                </button>
+              </div>
             </form>
-
-            <p className="mt-4 text-center text-[10px] text-gray-400 leading-tight">
-              To continue, Google will share your name and email address with VetAI 360.
-            </p>
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
