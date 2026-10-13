@@ -4,6 +4,7 @@ import { Eye, EyeOff, ArrowRight } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { ErrorBanner } from "../components/ui";
 import AuthShell from "../components/AuthShell";
+import GoogleAuthButton from "../components/GoogleAuthButton";
 
 export default function Login() {
   const { login } = useAuth();
@@ -110,6 +111,17 @@ export default function Login() {
           )}
         </button>
       </form>
+
+      {/* OR Divider */}
+      <div className="relative my-4 flex items-center justify-center">
+        <div className="w-full border-t border-gray-100" />
+        <span className="absolute bg-white px-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+          or continue with
+        </span>
+      </div>
+
+      {/* Google Authentication Button */}
+      <GoogleAuthButton mode="signin" onError={(err) => setError(err)} />
 
       {/* Interactive Quick Demo Pills with Bounce & Hover Effects */}
       <div className="mt-5 border-t border-gray-100 pt-4">

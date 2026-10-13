@@ -4,6 +4,7 @@ import { Eye, EyeOff, ArrowRight } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { ErrorBanner } from "../components/ui";
 import AuthShell from "../components/AuthShell";
+import GoogleAuthButton from "../components/GoogleAuthButton";
 
 export default function Register() {
   const { register } = useAuth();
@@ -212,6 +213,21 @@ export default function Register() {
           )}
         </button>
       </form>
+
+      {/* OR Divider */}
+      <div className="relative my-4 flex items-center justify-center">
+        <div className="w-full border-t border-gray-100" />
+        <span className="absolute bg-white px-2.5 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+          or continue with
+        </span>
+      </div>
+
+      {/* Google Sign Up Button */}
+      <GoogleAuthButton
+        mode="signup"
+        role={form.role}
+        onError={(err) => setError(err)}
+      />
 
       {/* Switch to Login */}
       <p className="mt-5 text-center text-xs text-gray-500">

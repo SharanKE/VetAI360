@@ -36,13 +36,20 @@ export function AuthProvider({ children }) {
     return res.data;
   }
 
+  async function loginWithGoogle(payload) {
+    const res = await client.post("/auth/google", payload);
+    localStorage.setItem("vetai360_token", res.data.token);
+    setUser(res.data.user);
+    return res.data.user;
+  }
+
   function logout() {
     localStorage.removeItem("vetai360_token");
     setUser(null);
   }
 
   return (
-    <AuthContext.Provider value={{ user, setUser, login, register, logout, loading }}>
+    <AuthContext.Provider value={{ user, setUser, login, register, loginWithGoogle, logout, loading }}>
       {children}
     </AuthContext.Provider>
   );

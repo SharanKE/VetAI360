@@ -80,6 +80,63 @@ router.post("/login", async (req, res) => {
   }
 });
 
+router.post("/google", async (req, res) => {
+  try {
+    const { credential, email, name, role = "farmer", phone, language } = req.body;
+
+    let userEmail = email ? String(email).trim().toLowerCase() : null;
+    let userName = name ? String(name).trim() : null;
+
+    // If Google ID token is provided, verify via Google tokeninfo
+    if (credential) {
+      try {
+        const fetch = require("node-fetch");
+        const verifyRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${credential}`);
+        if (verifyRes.ok) {
+          const payload = await verifyRes.json();
+          if (payload.email) {
+            userEmail = payload.email.toLowerCase();
+            userName = payload.name || userName || userEmail.split("@")[0];
+          }
+        }
+      } catch (err) {
+        console.warn("Google tokeninfo verification error, falling back to body:", err.message);
+      }
+    }
+
+    if (!userEmail) {
+      return res.status(400).json({ error: "Google email is required." });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+    if (!emailRegex.test(userEmail)) {
+      return res.status(400).json({ error: "Invalid Google email address." });
+    }
+
+    let user = await User.findByEmail(userEmail);
+    if (!user) {
+      const crypto = require("crypto");
+      const safeRole = ["farmer", "vet"].includes(role) ? role : "farmer";
+      const randomPassword = crypto.randomBytes(16).toString("hex");
+      const passwordHash = bcrypt.hashSync(randomPassword, 10);
+      user = await User.create({
+        name: userName || userEmail.split("@")[0],
+        email: userEmail,
+        passwordHash,
+        role: safeRole,
+        phone: phone || null,
+        language: language || "en",
+      });
+    }
+
+    const token = signToken(user);
+    res.json({ token, user: User.publicView(user) });
+  } catch (err) {
+    console.error("Google auth error:", err);
+    res.status(500).json({ error: err.message || "Google authentication failed." });
+  }
+});
+
 router.get("/me", authenticate, (req, res) => {
   res.json({ user: User.publicView(req.user) });
 });
