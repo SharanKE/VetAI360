@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, CheckCircle2, Stethoscope, Mic } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Stethoscope, Mic, Hospital, Navigation } from "lucide-react";
 import client from "../api/client";
 import { Button, Card, ErrorBanner, PageHeader, Select } from "../components/ui";
 
@@ -289,6 +289,27 @@ export default function SymptomChecker() {
                   </div>
                 </div>
               </Card>
+
+              {/* Hospital Locator Action */}
+              <Link
+                to="/nearby-vets"
+                className={`flex items-center justify-between rounded-xl p-3.5 shadow-sm transition ${
+                  result.is_urgent
+                    ? "bg-red-600 hover:bg-red-700 text-white"
+                    : "bg-pasture-700 hover:bg-pasture-800 text-white"
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Hospital size={20} className={result.is_urgent ? "animate-pulse" : ""} />
+                  <div>
+                    <p className="text-xs font-bold leading-tight">
+                      {result.is_urgent ? "🚨 Find Nearest Emergency Veterinary Hospital" : "📍 Find Nearest Veterinary Hospital"}
+                    </p>
+                    <p className="text-[10px] text-white/80">Turn-by-turn GPS directions & 24/7 doctors</p>
+                  </div>
+                </div>
+                <Navigation size={16} />
+              </Link>
 
               {/* Recommendation */}
               <Card>

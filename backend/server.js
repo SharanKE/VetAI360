@@ -33,6 +33,7 @@ const alertRoutes = require("./routes/alerts");
 const predictRoutes = require("./routes/predict");
 const appointmentRoutes = require("./routes/appointments");
 const adminRoutes = require("./routes/admin");
+const hospitalsRoutes = require("./routes/hospitals");
 
 const app = express();
 const server = http.createServer(app);
@@ -82,6 +83,7 @@ app.use("/api/alerts", alertRoutes);
 app.use("/api/predict", predictRoutes);
 app.use("/api/appointments", appointmentRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/hospitals", hospitalsRoutes);
 
 // Serve production static frontend if built
 const frontendDist = path.join(__dirname, "../frontend/dist");

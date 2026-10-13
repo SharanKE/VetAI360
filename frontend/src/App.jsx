@@ -9,6 +9,7 @@ import Livestock from "./pages/Livestock";
 import AnimalProfile from "./pages/AnimalProfile";
 import Monitoring from "./pages/Monitoring";
 import PastureMap from "./pages/PastureMap";
+import NearbyVets from "./pages/NearbyVets";
 import VoiceAssistant from "./pages/VoiceAssistant";
 import SymptomChecker from "./pages/SymptomChecker";
 import ImageDiagnosis from "./pages/ImageDiagnosis";
@@ -60,6 +61,7 @@ export default function App() {
         <Route path="livestock/:id" element={<AnimalProfile />} />
         <Route path="monitoring" element={<Monitoring />} />
         <Route path="pasture-map" element={<PastureMap />} />
+        <Route path="nearby-vets" element={<NearbyVets />} />
         <Route path="voice-assistant" element={<VoiceAssistant />} />
         <Route path="symptom-checker" element={<SymptomChecker />} />
         <Route path="image-diagnosis" element={<ImageDiagnosis />} />

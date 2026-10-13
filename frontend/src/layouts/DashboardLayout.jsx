@@ -13,6 +13,7 @@ import {
   Video,
   ShieldCheck,
   LogOut,
+  Hospital,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useSocket } from "../context/SocketContext";
@@ -23,6 +24,7 @@ const NAV_ITEMS = [
   { to: "/livestock", label: "Livestock", icon: PawPrint, roles: ["farmer", "vet", "admin"] },
   { to: "/monitoring", label: "IoT Monitoring", icon: Activity, roles: ["farmer", "vet", "admin"] },
   { to: "/pasture-map", label: "GPS Pasture Map", icon: MapPin, roles: ["farmer", "vet", "admin"] },
+  { to: "/nearby-vets", label: "Nearby Hospitals", icon: Hospital, roles: ["farmer", "vet", "admin"] },
   { to: "/voice-assistant", label: "AI Voice Assistant", icon: Mic, roles: ["farmer", "vet"] },
   { to: "/symptom-checker", label: "Symptom Checker", icon: Stethoscope, roles: ["farmer", "vet"] },
   { to: "/image-diagnosis", label: "Image Diagnosis", icon: Camera, roles: ["farmer", "vet"] },

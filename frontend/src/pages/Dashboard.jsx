@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { PawPrint, Bell, Syringe, Stethoscope, Camera, Video } from "lucide-react";
+import { PawPrint, Bell, Syringe, Stethoscope, Camera, Video, Hospital } from "lucide-react";
 import client from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { Card, PageHeader, SeverityBadge, EmptyState } from "../components/ui";
@@ -113,23 +113,32 @@ export default function Dashboard() {
       </div>
 
       {(user.role === "farmer" || user.role === "vet") && (
-        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Link to="/nearby-vets" className="group">
+            <Card className="flex items-center gap-3 transition-shadow group-hover:shadow-md border-amber-200 bg-amber-50/50">
+              <Hospital size={20} className="text-amber-600 flex-shrink-0" />
+              <div>
+                <span className="text-sm font-semibold text-ink">Nearby Hospitals</span>
+                <p className="text-[11px] text-amber-700">GPS directions & 24/7 care</p>
+              </div>
+            </Card>
+          </Link>
           <Link to="/symptom-checker" className="group">
             <Card className="flex items-center gap-3 transition-shadow group-hover:shadow-md">
-              <Stethoscope size={20} className="text-pasture-600" />
+              <Stethoscope size={20} className="text-pasture-600 flex-shrink-0" />
               <span className="text-sm font-medium text-ink">Run a symptom check</span>
             </Card>
           </Link>
           <Link to="/image-diagnosis" className="group">
             <Card className="flex items-center gap-3 transition-shadow group-hover:shadow-md">
-              <Camera size={20} className="text-pasture-600" />
-              <span className="text-sm font-medium text-ink">Diagnose from a photo</span>
+              <Camera size={20} className="text-pasture-600 flex-shrink-0" />
+              <span className="text-sm font-medium text-ink">Diagnose from photo</span>
             </Card>
           </Link>
           <Link to="/telemedicine" className="group">
             <Card className="flex items-center gap-3 transition-shadow group-hover:shadow-md">
-              <Video size={20} className="text-pasture-600" />
-              <span className="text-sm font-medium text-ink">Book a vet consultation</span>
+              <Video size={20} className="text-pasture-600 flex-shrink-0" />
+              <span className="text-sm font-medium text-ink">Book consultation</span>
             </Card>
           </Link>
         </div>
