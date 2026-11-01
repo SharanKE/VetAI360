@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import {
   Sparkles,
@@ -20,9 +21,54 @@ import {
   Bell,
 } from "lucide-react";
 
+const TELEMETRY_FEED = [
+  { tag: "Cow #104", temp: "38.6°C", hr: "72 BPM", status: "Grazing Normal", color: "text-[#00D284]" },
+  { tag: "Buffalo #208", temp: "38.4°C", hr: "68 BPM", status: "Rumination Active", color: "text-[#00D284]" },
+  { tag: "Calf #312", temp: "38.8°C", hr: "80 BPM", status: "Pasture Zone A", color: "text-emerald-400" },
+  { tag: "Bull #009", temp: "38.5°C", hr: "74 BPM", status: "Normal Vitals", color: "text-[#00D284]" },
+];
+
 export default function Landing() {
+  const [mousePos, setMousePos] = useState({ x: -1000, y: -1000 });
+  const [scrollY, setScrollY] = useState(0);
+  const [feedIndex, setFeedIndex] = useState(0);
+
+  // Mouse follow spotlight
+  function handleMouseMove(e) {
+    setMousePos({ x: e.clientX, y: e.clientY });
+  }
+
+  // Scroll listener for smooth parallax
+  useEffect(() => {
+    function handleScroll() {
+      setScrollY(window.scrollY);
+    }
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  // Live telemetry feed ticker cycle
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setFeedIndex((prev) => (prev + 1) % TELEMETRY_FEED.length);
+    }, 3200);
+    return () => clearInterval(timer);
+  }, []);
+
+  const currentFeed = TELEMETRY_FEED[feedIndex];
+
   return (
-    <div className="min-h-screen bg-[#080B10] text-white selection:bg-[#00D284]/30 selection:text-[#00D284] font-sans">
+    <div
+      onMouseMove={handleMouseMove}
+      className="min-h-screen bg-[#080B10] text-white selection:bg-[#00D284]/30 selection:text-[#00D284] font-sans relative overflow-x-hidden"
+    >
+      {/* Dynamic Cursor Spotlight (Follows mouse smoothly) */}
+      <div
+        className="pointer-events-none fixed inset-0 z-0 transition-opacity duration-300"
+        style={{
+          background: `radial-gradient(750px circle at ${mousePos.x}px ${mousePos.y}px, rgba(0, 210, 132, 0.07), transparent 75%)`,
+        }}
+      />
       {/* Top Ambient Light Glow */}
       <div className="relative border-b border-white/[0.06] overflow-hidden">
         <div className="absolute top-0 inset-x-0 h-96 bg-[radial-gradient(ellipse_65%_55%_at_50%_0%,rgba(0,210,132,0.14)_0%,rgba(8,11,16,0)_70%)] pointer-events-none" />
@@ -65,16 +111,21 @@ export default function Landing() {
 
         {/* Hero Section */}
         <section className="relative max-w-4xl mx-auto px-6 pt-16 pb-14 text-center z-10">
-          {/* Top Pill Badge */}
-          <div className="inline-flex items-center gap-2 rounded-full border border-[#00D284]/30 bg-[#00D284]/[0.08] px-3.5 py-1 text-xs font-semibold text-[#00D284] mb-8">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#00D284] animate-ping" />
+          {/* Top Pill Badge with Pulse */}
+          <div className="inline-flex items-center gap-2 rounded-full border border-[#00D284]/30 bg-[#00D284]/[0.08] px-4 py-1.5 text-xs font-semibold text-[#00D284] mb-8 animate-pulse-subtle shadow-md shadow-[#00D284]/15 hover:border-[#00D284]/60 transition-colors cursor-default">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#00D284] opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00D284]"></span>
+            </span>
             <span>Next-Generation Veterinary Tools</span>
           </div>
 
           {/* Main Headline */}
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight leading-[1.12]">
             Better care for every <br className="hidden sm:block" />
-            <span className="text-[#00D284]">patient. Every time.</span>
+            <span className="text-[#00D284] drop-shadow-[0_0_24px_rgba(0,210,132,0.35)]">
+              patient. Every time.
+            </span>
           </h1>
 
           {/* Subtitle */}
@@ -82,32 +133,42 @@ export default function Landing() {
             VetAI 360 is the next-generation livestock and veterinary healthcare platform. Real-time IoT vitals monitoring, GPS pasture geofencing, AI multimodal disease diagnosis, hospital navigation radar, and encrypted telemedicine.
           </p>
 
-          {/* Buttons */}
+          {/* Buttons with Hover Glow Shimmer */}
           <div className="mt-9 flex flex-col sm:flex-row items-center justify-center gap-3.5">
             <Link
               to="/nearby-vets"
-              className="w-full sm:w-auto rounded-full bg-[#00D284] px-7 py-3 text-sm font-bold text-black shadow-[0_0_24px_-2px_rgba(0,210,132,0.38)] hover:shadow-[0_0_32px_2px_rgba(0,210,132,0.55)] transition-all hover:-translate-y-0.5"
+              className="w-full sm:w-auto rounded-full bg-[#00D284] px-7 py-3 text-sm font-bold text-black shadow-[0_0_24px_-2px_rgba(0,210,132,0.38)] hover:shadow-[0_0_36px_4px_rgba(0,210,132,0.65)] hover:-translate-y-1 active:translate-y-0 transition-all duration-300"
             >
               Explore Nearby Hospitals
             </Link>
             <a
               href="#features"
-              className="w-full sm:w-auto rounded-full bg-white/[0.05] border border-white/[0.1] px-7 py-3 text-sm font-semibold text-slate-200 hover:bg-white/[0.09] hover:text-white transition"
+              className="w-full sm:w-auto rounded-full bg-white/[0.05] border border-white/[0.1] px-7 py-3 text-sm font-semibold text-slate-200 hover:bg-white/[0.09] hover:text-white hover:border-white/[0.25] hover:-translate-y-1 transition-all duration-300"
             >
               See All Features
             </a>
           </div>
         </section>
 
-        {/* Smartphone Mockup Frame */}
-        <div className="max-w-xl mx-auto px-6 pb-20 relative z-10">
-          <div className="rounded-[40px] border-4 border-[#1E2638] bg-[#0A0E17] p-3 shadow-2xl shadow-black relative overflow-hidden">
+        {/* Smartphone Mockup Frame with Floating Parallax */}
+        <div
+          className="max-w-xl mx-auto px-6 pb-20 relative z-10"
+          style={{
+            transform: `translateY(${Math.min(scrollY * 0.08, 45)}px) perspective(1000px) rotateX(${Math.max(0, 5 - scrollY * 0.015)}deg)`,
+            transition: "transform 0.12s ease-out",
+          }}
+        >
+          {/* Ambient Mint Glow Aura behind Phone */}
+          <div className="absolute inset-0 bg-[#00D284]/[0.08] blur-3xl rounded-full -z-10 transform scale-95 animate-pulse-glow pointer-events-none" />
+
+          {/* Smartphone Shell with Gentle Float */}
+          <div className="rounded-[40px] border-4 border-[#1E2638] bg-[#0A0E17] p-3 shadow-2xl shadow-black relative overflow-hidden animate-float-slow">
             {/* Camera / Speaker Notch */}
             <div className="w-28 h-4 bg-[#1E2638] rounded-full mx-auto mb-3" />
 
             {/* Screen Area */}
             <div className="rounded-[30px] bg-gradient-to-b from-[#0F1D1B] via-[#0B131A] to-[#0A0D14] p-6 border border-[#00D284]/20 text-center relative overflow-hidden">
-              <div className="h-16 w-16 mx-auto rounded-2xl bg-[#00D284]/15 border border-[#00D284]/40 flex items-center justify-center text-[#00D284] shadow-lg shadow-[#00D284]/10 mb-4">
+              <div className="h-16 w-16 mx-auto rounded-2xl bg-[#00D284]/15 border border-[#00D284]/40 flex items-center justify-center text-[#00D284] shadow-lg shadow-[#00D284]/10 mb-4 transition-transform duration-300 hover:scale-105">
                 <Stethoscope size={32} strokeWidth={2.2} />
               </div>
 
@@ -117,17 +178,36 @@ export default function Landing() {
                 Empowering farmers and veterinarians with AI diagnostics, IoT telemetry, and live clinical consultations.
               </p>
 
+              {/* Live Simulated Collar Telemetry Ticker */}
+              <div className="mt-4 rounded-xl bg-black/50 border border-white/[0.08] p-2.5 flex items-center justify-between text-left transition-all duration-500">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#00D284] opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00D284]"></span>
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-mono text-slate-400">Live Collar Telemetry</p>
+                    <p className="text-xs font-bold text-white tracking-wide truncate">
+                      {currentFeed.tag} · {currentFeed.temp} · {currentFeed.hr}
+                    </p>
+                  </div>
+                </div>
+                <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-[#00D284]/15 text-[#00D284] shrink-0 border border-[#00D284]/20">
+                  {currentFeed.status}
+                </span>
+              </div>
+
               {/* Quick Feature Badges Inside Screen */}
-              <div className="grid grid-cols-3 gap-2.5 mt-6 pt-4 border-t border-white/[0.08]">
-                <div className="bg-white/[0.04] border border-white/[0.08] rounded-xl p-2.5 text-center">
+              <div className="grid grid-cols-3 gap-2.5 mt-4 pt-3 border-t border-white/[0.08]">
+                <div className="bg-white/[0.04] border border-white/[0.08] rounded-xl p-2.5 text-center transition-all hover:border-[#00D284]/30 hover:bg-white/[0.08]">
                   <div className="text-lg mb-1">🐾</div>
                   <p className="text-[10px] font-bold text-slate-200">Livestock Records</p>
                 </div>
-                <div className="bg-[#00D284]/[0.08] border border-[#00D284]/30 rounded-xl p-2.5 text-center">
+                <div className="bg-[#00D284]/[0.08] border border-[#00D284]/30 rounded-xl p-2.5 text-center transition-all hover:bg-[#00D284]/[0.15]">
                   <div className="text-lg mb-1">🩺</div>
                   <p className="text-[10px] font-bold text-[#00D284]">AI Diagnostics</p>
                 </div>
-                <div className="bg-white/[0.04] border border-white/[0.08] rounded-xl p-2.5 text-center">
+                <div className="bg-white/[0.04] border border-white/[0.08] rounded-xl p-2.5 text-center transition-all hover:border-[#00D284]/30 hover:bg-white/[0.08]">
                   <div className="text-lg mb-1">📡</div>
                   <p className="text-[10px] font-bold text-slate-200">IoT & GPS Radar</p>
                 </div>
@@ -151,9 +231,9 @@ export default function Landing() {
         {/* 2-Column Dark Card Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {/* Card 1: AI Image Diagnosis */}
-          <div className="rounded-2xl bg-[#0C1019] border border-white/[0.08] p-7 transition-all duration-300 hover:border-[#00D284]/45 hover:bg-[#111723] hover:-translate-y-1 hover:shadow-xl hover:shadow-[#00D284]/10 flex flex-col justify-between">
+          <div className="group rounded-2xl bg-[#0C1019] border border-white/[0.08] p-7 transition-all duration-300 hover:border-[#00D284]/50 hover:bg-[#111723] hover:-translate-y-2 hover:shadow-2xl hover:shadow-[#00D284]/15 flex flex-col justify-between cursor-default">
             <div>
-              <div className="h-11 w-11 rounded-xl bg-[#00D284]/15 border border-[#00D284]/30 flex items-center justify-center text-[#00D284] mb-5">
+              <div className="h-11 w-11 rounded-xl bg-[#00D284]/15 border border-[#00D284]/30 flex items-center justify-center text-[#00D284] mb-5 group-hover:scale-110 group-hover:bg-[#00D284]/25 group-hover:border-[#00D284]/50 transition-all duration-300">
                 <Camera size={22} />
               </div>
               <h3 className="text-lg font-bold text-white tracking-tight">AI Image Diagnosis</h3>
@@ -168,9 +248,9 @@ export default function Landing() {
           </div>
 
           {/* Card 2: IoT Vitals Monitoring */}
-          <div className="rounded-2xl bg-[#0C1019] border border-white/[0.08] p-7 transition-all duration-300 hover:border-[#00D284]/45 hover:bg-[#111723] hover:-translate-y-1 hover:shadow-xl hover:shadow-[#00D284]/10 flex flex-col justify-between">
+          <div className="group rounded-2xl bg-[#0C1019] border border-white/[0.08] p-7 transition-all duration-300 hover:border-[#00D284]/50 hover:bg-[#111723] hover:-translate-y-2 hover:shadow-2xl hover:shadow-[#00D284]/15 flex flex-col justify-between cursor-default">
             <div>
-              <div className="h-11 w-11 rounded-xl bg-[#00D284]/15 border border-[#00D284]/30 flex items-center justify-center text-[#00D284] mb-5">
+              <div className="h-11 w-11 rounded-xl bg-[#00D284]/15 border border-[#00D284]/30 flex items-center justify-center text-[#00D284] mb-5 group-hover:scale-110 group-hover:bg-[#00D284]/25 group-hover:border-[#00D284]/50 transition-all duration-300">
                 <Activity size={22} />
               </div>
               <h3 className="text-lg font-bold text-white tracking-tight">IoT Real-Time Vitals Monitoring</h3>
@@ -185,9 +265,9 @@ export default function Landing() {
           </div>
 
           {/* Card 3: GPS Pasture Map & Geofencing */}
-          <div className="rounded-2xl bg-[#0C1019] border border-white/[0.08] p-7 transition-all duration-300 hover:border-[#00D284]/45 hover:bg-[#111723] hover:-translate-y-1 hover:shadow-xl hover:shadow-[#00D284]/10 flex flex-col justify-between">
+          <div className="group rounded-2xl bg-[#0C1019] border border-white/[0.08] p-7 transition-all duration-300 hover:border-[#00D284]/50 hover:bg-[#111723] hover:-translate-y-2 hover:shadow-2xl hover:shadow-[#00D284]/15 flex flex-col justify-between cursor-default">
             <div>
-              <div className="h-11 w-11 rounded-xl bg-[#00D284]/15 border border-[#00D284]/30 flex items-center justify-center text-[#00D284] mb-5">
+              <div className="h-11 w-11 rounded-xl bg-[#00D284]/15 border border-[#00D284]/30 flex items-center justify-center text-[#00D284] mb-5 group-hover:scale-110 group-hover:bg-[#00D284]/25 group-hover:border-[#00D284]/50 transition-all duration-300">
                 <MapPin size={22} />
               </div>
               <h3 className="text-lg font-bold text-white tracking-tight">GPS Pasture Map & Geofencing</h3>
@@ -202,9 +282,9 @@ export default function Landing() {
           </div>
 
           {/* Card 4: Nearby Veterinary Hospitals */}
-          <div className="rounded-2xl bg-[#0C1019] border border-white/[0.08] p-7 transition-all duration-300 hover:border-[#00D284]/45 hover:bg-[#111723] hover:-translate-y-1 hover:shadow-xl hover:shadow-[#00D284]/10 flex flex-col justify-between">
+          <div className="group rounded-2xl bg-[#0C1019] border border-white/[0.08] p-7 transition-all duration-300 hover:border-[#00D284]/50 hover:bg-[#111723] hover:-translate-y-2 hover:shadow-2xl hover:shadow-[#00D284]/15 flex flex-col justify-between cursor-default">
             <div>
-              <div className="h-11 w-11 rounded-xl bg-[#00D284]/15 border border-[#00D284]/30 flex items-center justify-center text-[#00D284] mb-5">
+              <div className="h-11 w-11 rounded-xl bg-[#00D284]/15 border border-[#00D284]/30 flex items-center justify-center text-[#00D284] mb-5 group-hover:scale-110 group-hover:bg-[#00D284]/25 group-hover:border-[#00D284]/50 transition-all duration-300">
                 <Hospital size={22} />
               </div>
               <h3 className="text-lg font-bold text-white tracking-tight">Nearby Veterinary Hospital Radar</h3>
@@ -219,9 +299,9 @@ export default function Landing() {
           </div>
 
           {/* Card 5: AI Voice Assistant (Multilingual) */}
-          <div className="rounded-2xl bg-[#0C1019] border border-white/[0.08] p-7 transition-all duration-300 hover:border-[#00D284]/45 hover:bg-[#111723] hover:-translate-y-1 hover:shadow-xl hover:shadow-[#00D284]/10 flex flex-col justify-between">
+          <div className="group rounded-2xl bg-[#0C1019] border border-white/[0.08] p-7 transition-all duration-300 hover:border-[#00D284]/50 hover:bg-[#111723] hover:-translate-y-2 hover:shadow-2xl hover:shadow-[#00D284]/15 flex flex-col justify-between cursor-default">
             <div>
-              <div className="h-11 w-11 rounded-xl bg-[#00D284]/15 border border-[#00D284]/30 flex items-center justify-center text-[#00D284] mb-5">
+              <div className="h-11 w-11 rounded-xl bg-[#00D284]/15 border border-[#00D284]/30 flex items-center justify-center text-[#00D284] mb-5 group-hover:scale-110 group-hover:bg-[#00D284]/25 group-hover:border-[#00D284]/50 transition-all duration-300">
                 <Mic size={22} />
               </div>
               <h3 className="text-lg font-bold text-white tracking-tight">AI Multilingual Voice Assistant</h3>
@@ -236,9 +316,9 @@ export default function Landing() {
           </div>
 
           {/* Card 6: Telemedicine Video Consults */}
-          <div className="rounded-2xl bg-[#0C1019] border border-white/[0.08] p-7 transition-all duration-300 hover:border-[#00D284]/45 hover:bg-[#111723] hover:-translate-y-1 hover:shadow-xl hover:shadow-[#00D284]/10 flex flex-col justify-between">
+          <div className="group rounded-2xl bg-[#0C1019] border border-white/[0.08] p-7 transition-all duration-300 hover:border-[#00D284]/50 hover:bg-[#111723] hover:-translate-y-2 hover:shadow-2xl hover:shadow-[#00D284]/15 flex flex-col justify-between cursor-default">
             <div>
-              <div className="h-11 w-11 rounded-xl bg-[#00D284]/15 border border-[#00D284]/30 flex items-center justify-center text-[#00D284] mb-5">
+              <div className="h-11 w-11 rounded-xl bg-[#00D284]/15 border border-[#00D284]/30 flex items-center justify-center text-[#00D284] mb-5 group-hover:scale-110 group-hover:bg-[#00D284]/25 group-hover:border-[#00D284]/50 transition-all duration-300">
                 <Video size={22} />
               </div>
               <h3 className="text-lg font-bold text-white tracking-tight">Telemedicine & Video Rooms</h3>
@@ -253,9 +333,9 @@ export default function Landing() {
           </div>
 
           {/* Card 7: 360° Livestock & Patient Records */}
-          <div className="rounded-2xl bg-[#0C1019] border border-white/[0.08] p-7 transition-all duration-300 hover:border-[#00D284]/45 hover:bg-[#111723] hover:-translate-y-1 hover:shadow-xl hover:shadow-[#00D284]/10 flex flex-col justify-between">
+          <div className="group rounded-2xl bg-[#0C1019] border border-white/[0.08] p-7 transition-all duration-300 hover:border-[#00D284]/50 hover:bg-[#111723] hover:-translate-y-2 hover:shadow-2xl hover:shadow-[#00D284]/15 flex flex-col justify-between cursor-default">
             <div>
-              <div className="h-11 w-11 rounded-xl bg-[#00D284]/15 border border-[#00D284]/30 flex items-center justify-center text-[#00D284] mb-5">
+              <div className="h-11 w-11 rounded-xl bg-[#00D284]/15 border border-[#00D284]/30 flex items-center justify-center text-[#00D284] mb-5 group-hover:scale-110 group-hover:bg-[#00D284]/25 group-hover:border-[#00D284]/50 transition-all duration-300">
                 <PawPrint size={22} />
               </div>
               <h3 className="text-lg font-bold text-white tracking-tight">360° Livestock Health Dossier</h3>
@@ -270,9 +350,9 @@ export default function Landing() {
           </div>
 
           {/* Card 8: Automated Vaccination Schedule & Alerts */}
-          <div className="rounded-2xl bg-[#0C1019] border border-white/[0.08] p-7 transition-all duration-300 hover:border-[#00D284]/45 hover:bg-[#111723] hover:-translate-y-1 hover:shadow-xl hover:shadow-[#00D284]/10 flex flex-col justify-between">
+          <div className="group rounded-2xl bg-[#0C1019] border border-white/[0.08] p-7 transition-all duration-300 hover:border-[#00D284]/50 hover:bg-[#111723] hover:-translate-y-2 hover:shadow-2xl hover:shadow-[#00D284]/15 flex flex-col justify-between cursor-default">
             <div>
-              <div className="h-11 w-11 rounded-xl bg-[#00D284]/15 border border-[#00D284]/30 flex items-center justify-center text-[#00D284] mb-5">
+              <div className="h-11 w-11 rounded-xl bg-[#00D284]/15 border border-[#00D284]/30 flex items-center justify-center text-[#00D284] mb-5 group-hover:scale-110 group-hover:bg-[#00D284]/25 group-hover:border-[#00D284]/50 transition-all duration-300">
                 <Syringe size={22} />
               </div>
               <h3 className="text-lg font-bold text-white tracking-tight">Automated Vaccination Schedules</h3>
