@@ -1,6 +1,7 @@
 const express = require("express");
 const {
   findNearbyHospitals,
+  getDrivingRoute,
   geocodeLocationQuery,
   VERIFIED_HOSPITALS,
 } = require("../services/hospitalLocator");
@@ -8,51 +9,88 @@ const { authenticate } = require("../middleware/auth");
 
 const router = express.Router();
 
-// Allow authenticated users (farmers, vets, admins) to look up hospitals
+// Allow authenticated users to look up hospitals & routes
 router.use(authenticate);
 
 /**
  * GET /api/hospitals/nearby
  * Query Params:
- *  - lat: latitude (number)
- *  - lng: longitude (number)
+ *  - lat: user latitude
+ *  - lng: user longitude
  *  - radiusKm: search radius in km (default 50)
  *  - filterType: 'all' | 'emergency' | 'govt' | 'cattle'
- *  - query: optional text search for city/village/landmark (e.g. "Shimoga", "Hebbal")
+ *  - query: city/town/landmark name OR hospital name
  */
 router.get("/nearby", async (req, res) => {
   try {
     let { lat, lng, radiusKm = 50, filterType = "all", query } = req.query;
 
+    const userLat = lat !== undefined && lat !== "" ? parseFloat(lat) : 13.9299;
+    const userLng = lng !== undefined && lng !== "" ? parseFloat(lng) : 75.5681;
+
+    let searchLat = userLat;
+    let searchLng = userLng;
     let placeName = null;
+
     if (query && query.trim()) {
-      const geo = await geocodeLocationQuery(query.trim());
+      const trimmed = query.trim();
+      const geo = await geocodeLocationQuery(trimmed);
       if (geo) {
-        lat = geo.lat;
-        lng = geo.lng;
+        searchLat = geo.lat;
+        searchLng = geo.lng;
         placeName = geo.name;
       }
     }
 
-    // Default to Shimoga / PESITM region if coordinates not provided
-    const targetLat = lat !== undefined && lat !== "" ? parseFloat(lat) : 13.9299;
-    const targetLng = lng !== undefined && lng !== "" ? parseFloat(lng) : 75.5681;
-
     const data = await findNearbyHospitals({
-      lat: targetLat,
-      lng: targetLng,
+      userLat,
+      userLng,
+      searchLat,
+      searchLng,
       radiusKm: parseFloat(radiusKm) || 50,
       filterType: filterType || "all",
+      keyword: query || "",
     });
 
     if (placeName) {
-      data.userLocation.placeName = placeName;
+      data.searchLocation = {
+        latitude: searchLat,
+        longitude: searchLng,
+        placeName,
+      };
     }
 
     res.json(data);
   } catch (err) {
     console.error("Error finding nearby veterinary hospitals:", err);
     res.status(500).json({ error: "Failed to locate nearby veterinary hospitals." });
+  }
+});
+
+/**
+ * GET /api/hospitals/route
+ * Returns real road driving directions (OSRM polyline, distance in km, travel time & steps)
+ * Query Params:
+ *  - fromLat, fromLng: starting coordinates (e.g. user GPS position)
+ *  - toLat, toLng: destination coordinates (e.g. veterinary hospital)
+ */
+router.get("/route", async (req, res) => {
+  try {
+    const { fromLat, fromLng, toLat, toLng } = req.query;
+
+    if (!fromLat || !fromLng || !toLat || !toLng) {
+      return res.status(400).json({ error: "fromLat, fromLng, toLat, and toLng are required." });
+    }
+
+    const route = await getDrivingRoute(fromLat, fromLng, toLat, toLng);
+    if (!route) {
+      return res.status(500).json({ error: "Could not calculate driving route." });
+    }
+
+    res.json(route);
+  } catch (err) {
+    console.error("Error getting driving route:", err);
+    res.status(500).json({ error: "Failed to get driving route." });
   }
 });
 

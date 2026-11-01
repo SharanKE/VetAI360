@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 
 export default function AuthShell({ title, subtitle, children }) {
   const [mousePos, setMousePos] = useState({ x: -1000, y: -1000 });
@@ -28,7 +29,7 @@ export default function AuthShell({ title, subtitle, children }) {
 
       <div className="relative z-10 w-full max-w-md">
         {/* Interactive Logo with Hover Animation */}
-        <div className="mb-6 text-center group cursor-pointer">
+        <Link to="/landing" className="mb-6 block text-center group cursor-pointer">
           <div className="mx-auto mb-3 flex h-13 w-13 items-center justify-center rounded-2xl bg-pasture-800 text-white shadow-md transition-all duration-300 ease-out group-hover:scale-110 group-hover:-rotate-6 group-hover:shadow-xl group-hover:bg-pasture-700">
             <span className="text-2xl transition-transform duration-300 group-hover:scale-125">
               🐾
@@ -40,7 +41,7 @@ export default function AuthShell({ title, subtitle, children }) {
           <p className="mt-1 text-xs text-gray-500 transition-colors duration-200 group-hover:text-gray-700">
             Smart Veterinary Healthcare Platform
           </p>
-        </div>
+        </Link>
 
         {/* Clean Auth Card with Hover Floating Lift */}
         <div className="rounded-2xl border border-gray-100 bg-white/95 backdrop-blur-md p-7 shadow-xl shadow-pasture-950/5 transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-2xl hover:shadow-pasture-900/10 sm:p-9 animate-fade-in">

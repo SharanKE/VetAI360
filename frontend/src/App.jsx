@@ -4,6 +4,7 @@ import DashboardLayout from "./layouts/DashboardLayout";
 
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import Landing from "./pages/Landing";
 import Dashboard from "./pages/Dashboard";
 import Livestock from "./pages/Livestock";
 import AnimalProfile from "./pages/AnimalProfile";
@@ -45,31 +46,48 @@ export default function App() {
 
   return (
     <Routes>
+      <Route path="/landing" element={<Landing />} />
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
       <Route path="/register" element={user ? <Navigate to="/" replace /> : <Register />} />
 
+      {/* Root route: Unauthenticated visitors see Landing page; authenticated users see Dashboard */}
       <Route
         path="/"
+        element={
+          user ? (
+            <ProtectedRoute>
+              <DashboardLayout />
+            </ProtectedRoute>
+          ) : (
+            <Landing />
+          )
+        }
+      >
+        <Route index element={user ? <Dashboard /> : null} />
+      </Route>
+
+      {/* Protected application feature routes */}
+      <Route
         element={
           <ProtectedRoute>
             <DashboardLayout />
           </ProtectedRoute>
         }
       >
-        <Route index element={<Dashboard />} />
-        <Route path="livestock" element={<Livestock />} />
-        <Route path="livestock/:id" element={<AnimalProfile />} />
-        <Route path="monitoring" element={<Monitoring />} />
-        <Route path="pasture-map" element={<PastureMap />} />
-        <Route path="nearby-vets" element={<NearbyVets />} />
-        <Route path="voice-assistant" element={<VoiceAssistant />} />
-        <Route path="symptom-checker" element={<SymptomChecker />} />
-        <Route path="image-diagnosis" element={<ImageDiagnosis />} />
-        <Route path="vaccinations" element={<Vaccinations />} />
-        <Route path="alerts" element={<AlertsPage />} />
-        <Route path="telemedicine" element={<Telemedicine />} />
-        <Route path="telemedicine/:id" element={<AppointmentRoom />} />
-        <Route path="admin" element={<Admin />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/livestock" element={<Livestock />} />
+        <Route path="/livestock/:id" element={<AnimalProfile />} />
+        <Route path="/monitoring" element={<Monitoring />} />
+        <Route path="/pasture-map" element={<PastureMap />} />
+        <Route path="/nearby-vets" element={<NearbyVets />} />
+        <Route path="/voice-assistant" element={<VoiceAssistant />} />
+        <Route path="/symptom-checker" element={<SymptomChecker />} />
+        <Route path="/image-diagnosis" element={<ImageDiagnosis />} />
+        <Route path="/vaccinations" element={<Vaccinations />} />
+        <Route path="/alerts" element={<AlertsPage />} />
+        <Route path="/telemedicine" element={<Telemedicine />} />
+        <Route path="/telemedicine/:id" element={<AppointmentRoom />} />
+        <Route path="/admin" element={<Admin />} />
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>
