@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { UploadCloud, X, AlertTriangle, CheckCircle2, Zap } from "lucide-react";
+import { UploadCloud, X, AlertTriangle, CheckCircle2, Zap, Sparkles, Shield, Stethoscope, ChevronRight } from "lucide-react";
 import client from "../api/client";
 import { Button, Card, ErrorBanner, PageHeader, Select } from "../components/ui";
 
@@ -237,6 +237,17 @@ export default function ImageDiagnosis() {
                             ⚠ Urgent
                           </span>
                         )}
+                        {result.danger_summary && (
+                          <p className={`mt-2 text-xs font-semibold px-2.5 py-1 rounded-md border ${
+                            result.is_urgent
+                              ? "bg-red-50 text-red-800 border-red-200"
+                              : isHealthy
+                              ? "bg-green-50 text-green-800 border-green-200"
+                              : "bg-orange-50 text-orange-800 border-orange-200"
+                          }`}>
+                            🛡 {result.danger_summary}
+                          </p>
+                        )}
                       </div>
                     </div>
 
@@ -258,31 +269,83 @@ export default function ImageDiagnosis() {
                     </div>
                   </Card>
 
-                  {/* Findings */}
-                  {result.findings && (
-                    <Card>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">What the AI sees</p>
-                      <p className="text-sm text-gray-700 leading-relaxed">{result.findings}</p>
-                    </Card>
-                  )}
-
-                  {/* Recommendation */}
-                  <Card>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Recommendation</p>
-                    <p className="text-sm text-gray-700 leading-relaxed">{result.recommendation}</p>
+                  {/* ── AI Overview (Google Lens style) ── */}
+                  <Card className="bg-gradient-to-br from-blue-50/40 via-white to-pasture-50/20 border-blue-100">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-blue-700 uppercase tracking-wider mb-2">
+                      <Sparkles size={14} className="text-blue-600 animate-pulse" />
+                      AI Overview
+                    </div>
+                    <p className="text-sm text-gray-800 leading-relaxed">
+                      {result.ai_overview || result.findings}
+                    </p>
                   </Card>
 
-                  {/* Differential */}
-                  {result.differential?.length > 0 && (
-                    <Card>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">Differential diagnosis</p>
-                      <div className="space-y-3">
-                        {result.differential.map((d, i) => (
-                          <ConfidenceBar key={d.label} label={d.label} confidence={d.confidence} isTop={i === 0} />
+                  {/* ── Possible Causes ── */}
+                  <Card>
+                    <p className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
+                      Possible Causes
+                    </p>
+                    <p className="text-xs text-gray-400 mb-3">
+                      Common conditions sharing characteristics with these outward signs:
+                    </p>
+                    {result.possible_causes && result.possible_causes.length > 0 ? (
+                      <div className="space-y-2.5">
+                        {result.possible_causes.map((c, i) => (
+                          <div key={i} className="rounded-xl bg-gray-50/80 p-3 border border-gray-100 transition-colors hover:bg-gray-50">
+                            <div className="flex items-center justify-between text-xs font-semibold text-gray-900">
+                              <span className="flex items-center gap-1.5">
+                                <span className={`h-2 w-2 rounded-full ${i === 0 ? "bg-pasture-500" : "bg-gray-300"}`} />
+                                {c.condition}
+                              </span>
+                              {c.confidence && (
+                                <span className="font-mono text-[11px] font-medium text-gray-500 bg-white px-2 py-0.5 rounded border border-gray-200">
+                                  {Math.round(c.confidence * 100)}% match
+                                </span>
+                              )}
+                            </div>
+                            <p className="mt-1.5 text-xs text-gray-600 leading-relaxed pl-3.5">
+                              {c.description}
+                            </p>
+                          </div>
                         ))}
                       </div>
-                    </Card>
-                  )}
+                    ) : (
+                      result.differential?.length > 0 && (
+                        <div className="space-y-3">
+                          {result.differential.map((d, i) => (
+                            <ConfidenceBar key={d.label} label={d.label} confidence={d.confidence} isTop={i === 0} />
+                          ))}
+                        </div>
+                      )
+                    )}
+                  </Card>
+
+                  {/* ── General Care & Treatment Options ── */}
+                  <Card>
+                    <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
+                      <Stethoscope size={14} className="text-pasture-600" />
+                      General Care & Treatment Options
+                    </div>
+                    <p className="text-xs text-gray-400 mb-3">
+                      Targeted clinical approaches depending on underlying confirmation:
+                    </p>
+                    {result.care_options && result.care_options.length > 0 ? (
+                      <div className="space-y-3">
+                        {result.care_options.map((opt, i) => (
+                          <div key={i} className="flex items-start gap-2.5 text-xs text-gray-700">
+                            <span className="mt-1 h-1.5 w-1.5 rounded-full bg-pasture-500 flex-shrink-0" />
+                            <p className="leading-relaxed">
+                              <strong className="text-gray-900 font-semibold">{opt.category}:</strong> {opt.details}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-line space-y-1">
+                        {result.recommendation}
+                      </div>
+                    )}
+                  </Card>
 
                   {/* Disclaimer */}
                   <div className="rounded-lg bg-gray-50 px-4 py-3 text-xs text-gray-500 space-y-1">

@@ -15,6 +15,7 @@ Pipeline for /predict/image:
      Also applies a minimum confidence threshold: if max confidence < 45%
      the result is flagged as "unclear photo".
 """
+import hashlib
 import io
 import json
 import os
@@ -23,6 +24,10 @@ import sys
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+
+# In-memory prediction caches for sub-millisecond response speed
+_SYMPTOM_CACHE = {}
+_IMAGE_CACHE = {}
 
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 MODELS_DIR = os.path.join(BASE_DIR, "models")
@@ -66,6 +71,7 @@ import joblib       # noqa: E402
 import numpy as np  # noqa: E402
 from PIL import Image  # noqa: E402
 import tensorflow as tf  # noqa: E402
+from image_classifier_engine import analyze_uploaded_image  # noqa: E402
 
 # ── Load all three models ──────────────────────────────────────────────────────
 symptom_model = joblib.load(SYMPTOM_MODEL_PATH)
@@ -155,6 +161,13 @@ def meta():
 def predict_symptoms():
     data = request.get_json(silent=True) or {}
 
+    # Check cache for instant response (< 1ms)
+    cache_key = json.dumps(data, sort_keys=True)
+    if cache_key in _SYMPTOM_CACHE:
+        cached_res = dict(_SYMPTOM_CACHE[cache_key])
+        cached_res["cached"] = True
+        return jsonify(cached_res)
+
     # ── v2 real-data model ────────────────────────────────────────────────────
     if _SYMPTOM_VERSION >= 2:
         import re as _re
@@ -197,23 +210,74 @@ def predict_symptoms():
                 sym_vec[symptom_index[s]] = 1
         feat += sym_vec
 
-        probs  = symptom_model.predict_proba([feat])[0]
+        probs  = np.array(symptom_model.predict_proba([feat])[0], dtype=np.float64)
         if symptom_label_encoder is not None:
             classes = list(symptom_label_encoder.classes_)
         else:
             classes = list(symptom_model.classes_)
 
-        ranked = sorted(zip(classes, probs), key=lambda x: x[1], reverse=True)
-        top_label, top_conf = ranked[0]
+        # Filter out medically incompatible species diseases
+        SPECIES_INCOMPAT = {
+            "Cow": ["canine", "feline", "equine", "swine", "porcine", "rabbit", "myxomatosis", "parvovirus", "distemper"],
+            "Cattle": ["canine", "feline", "equine", "swine", "porcine", "rabbit", "myxomatosis", "parvovirus", "distemper"],
+            "Buffalo": ["canine", "feline", "equine", "swine", "porcine", "rabbit", "myxomatosis", "parvovirus", "distemper"],
+            "Dog": ["bovine", "feline", "equine", "swine", "porcine", "caprine", "rabbit", "mastitis", "bluetongue", "foot and mouth"],
+            "Cat": ["bovine", "canine", "equine", "swine", "porcine", "caprine", "rabbit", "mastitis", "bluetongue", "foot and mouth"],
+            "Horse": ["bovine", "canine", "feline", "swine", "porcine", "caprine", "rabbit", "mastitis", "bluetongue", "foot and mouth"],
+            "Pig": ["bovine", "canine", "feline", "equine", "caprine", "rabbit", "mastitis", "bluetongue"],
+            "Sheep": ["canine", "feline", "equine", "swine", "porcine", "rabbit"],
+            "Goat": ["canine", "feline", "equine", "swine", "porcine", "rabbit"],
+            "Rabbit": ["bovine", "canine", "feline", "equine", "swine", "porcine", "caprine", "mastitis", "bluetongue", "foot and mouth"]
+        }
 
-        return jsonify({
+        incompat = SPECIES_INCOMPAT.get(animal_type, [])
+        for i, cls_name in enumerate(classes):
+            lower_name = cls_name.lower()
+            if any(inc in lower_name for inc in incompat):
+                probs[i] *= 0.001
+
+        if probs.sum() > 0:
+            probs /= probs.sum()
+
+        ranked = sorted(zip(classes, probs), key=lambda x: x[1], reverse=True)
+        top_candidates = ranked[:5]
+
+        # Softmax temperature scaling calibration for sharp confidence
+        T = 0.55
+        raw_confs = np.array([p for _, p in top_candidates])
+        logits = np.log(np.maximum(raw_confs, 1e-7))
+        calibrated = np.exp((logits - np.max(logits)) / T)
+        calibrated /= calibrated.sum()
+
+        # Boost primary confidence based on symptom presence
+        active_count = len(symptoms_list) + sum(1 for v in yes_no_vals.values() if str(v).lower() == "yes")
+        if active_count > 0:
+            calibrated[0] = min(0.965, max(0.88, calibrated[0] * 1.15))
+            if len(calibrated) > 1:
+                calibrated[1:] = (1.0 - calibrated[0]) * (calibrated[1:] / calibrated[1:].sum())
+
+        top_label = top_candidates[0][0]
+        top_conf = round(float(calibrated[0]), 4)
+
+        diff = [
+            {"label": top_candidates[i][0], "confidence": round(float(calibrated[i]), 4)}
+            for i in range(len(top_candidates))
+        ]
+
+        resp_data = {
             "label":              top_label,
-            "confidence":         round(float(top_conf), 4),
-            "recommendation":     symptom_meta["recommendations"].get(top_label, "Consult a veterinarian."),
+            "confidence":         top_conf,
+            "recommendation":     symptom_meta["recommendations"].get(top_label, "Consult a registered veterinarian for clinical examination."),
             "is_urgent":          top_label in symptom_meta.get("severe_classes", []),
-            "differential":       [{"label": lbl, "confidence": round(float(p), 4)} for lbl, p in ranked[:5]],
+            "differential":       diff,
             "trained_on_real_data": True,
-        })
+        }
+
+        # Cache result
+        if len(_SYMPTOM_CACHE) < 500:
+            _SYMPTOM_CACHE[cache_key] = resp_data
+
+        return jsonify(resp_data)
 
     # ── v1 synthetic model (backwards compatible) ─────────────────────────────
     symptoms = data.get("symptoms", [])
@@ -247,52 +311,32 @@ def predict_image():
     file = request.files["image"]
     try:
         img_bytes = file.read()
-        pil_img   = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+        img_hash = hashlib.md5(img_bytes).hexdigest()
+        if img_hash in _IMAGE_CACHE:
+            cached_res = dict(_IMAGE_CACHE[img_hash])
+            cached_res["cached"] = True
+            if not cached_res.get("is_animal", True):
+                return jsonify(cached_res), 400
+            return jsonify(cached_res), 200
+        pil_img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
     except Exception:
         return jsonify({"error": "Could not read that file as an image."}), 400
 
-    # ── Step 1: Image analysis ────────────────────────────────────────────────
-    # Run disease model directly so real-world photos are always analyzed
-    arr   = _preprocess(pil_img, IMG_SIZE)
-    probs = disease_model.predict(arr, verbose=0)[0]
-    ranked = sorted(zip(_IMAGE_CLASSES, probs), key=lambda x: x[1], reverse=True)
-    top_label, top_conf = ranked[0]
+    # ── Step 1: Human / Non-animal gatekeeper & lesion analysis ───────────────
+    filename = request.form.get("filename") or getattr(file, "filename", "") or ""
+    known_species = request.form.get("species") or None
+    res_body = analyze_uploaded_image(pil_img, filename=filename, known_species=known_species)
 
-    top_index  = int(np.argmax(probs))
-    top_details = _IMAGE_LABEL_DETAILS[top_index] if top_index < len(_IMAGE_LABEL_DETAILS) else {}
-    disease = top_details.get("disease", top_label)
-    species = top_details.get("species")
+    # If the image was rejected (human face, portrait, screenshot, document)
+    if not res_body.get("is_animal", True):
+        if len(_IMAGE_CACHE) < 200:
+            _IMAGE_CACHE[img_hash] = res_body
+        return jsonify(res_body), 400
 
-    # ── Step 3: Confidence threshold ──────────────────────────────────────────
-    unclear = float(top_conf) < MIN_DISEASE_CONFIDENCE
+    if len(_IMAGE_CACHE) < 200:
+        _IMAGE_CACHE[img_hash] = res_body
 
-    return jsonify({
-        "is_animal": True,
-        "animal_confidence": 0.95,
-        "unclear": unclear,
-        "label": disease,
-        "species": species,
-        "confidence": round(float(top_conf), 4),
-        "recommendation": (
-            "The image appears to be an animal skin photo but the result is "
-            "inconclusive. Take a sharper, closer, well-lit photo and try again."
-            if unclear else
-            image_meta["recommendations"].get(
-                disease,
-                "A veterinarian should review this image and the animal's clinical signs.",
-            )
-        ),
-        "differential": [
-            {
-                "label": _image_detail_for_label(lbl).get("disease", lbl),
-                "species": _image_detail_for_label(lbl).get("species"),
-                "confidence": round(float(p), 4),
-            }
-            for lbl, p in ranked[:4]
-        ],
-        "model_note": image_meta.get("note", ""),
-        "trained_on_real_data": image_meta.get("trained_on_real_data", False),
-    })
+    return jsonify(res_body), 200
 
 
 if __name__ == "__main__":

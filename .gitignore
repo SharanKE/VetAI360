@@ -19,6 +19,8 @@ ml-service/models/
 *.db
 *.sqlite
 *.sqlite3
+*.zip
+ml-service/*.jpg
 
 # Python
 __pycache__/

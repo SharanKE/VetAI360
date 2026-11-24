@@ -80,9 +80,17 @@ router.post("/image", async (req, res) => {
   const { animalId } = req.body;
   const file = req.files.image;
 
+  let knownSpecies = null;
+  if (animalId) {
+    const animal = await Promise.resolve(Animal.findById(animalId));
+    if (animal && animal.species) {
+      knownSpecies = animal.species;
+    }
+  }
+
   let result;
   try {
-    result = await predictFromImage(file.data, file.name, file.mimetype);
+    result = await predictFromImage(file.data, file.name, file.mimetype, knownSpecies);
   } catch (err) {
     // Gatekeeper rejected the image (is_animal: false) — forward that body
     // to the client with the same 400 status so the frontend can handle it.

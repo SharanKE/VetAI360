@@ -52,50 +52,99 @@ CANONICAL = {
     # FMD variants
     "foot and mouth disease":               "Foot and Mouth Disease",
     "foot-and-mouth disease":               "Foot and Mouth Disease",
-    # Bovine respiratory variants
+    # Bovine respiratory variants & Mastitis & TB
     "bovine respiratory disease":           "Bovine Respiratory Disease",
     "bovine respiratory disease complex":   "Bovine Respiratory Disease",
     "bovine respiratory syncytial virus":   "Bovine Respiratory Disease",
     "bovine parainfluenza":                 "Bovine Respiratory Disease",
+    "bovine influenza":                     "Bovine Respiratory Disease",
+    "bovine pneumonia":                     "Bovine Respiratory Disease",
+    "bovine tuberculosis":                  "Bovine Tuberculosis",
+    "tuberculosis":                         "Bovine Tuberculosis",
+    "bovine mastitis":                      "Bovine Mastitis",
+    "mastitis":                             "Bovine Mastitis",
+    "bovine johne's disease":               "Bovine Johne's Disease",
+    "johne's disease":                      "Bovine Johne's Disease",
+    "bovine viral diarrhea":                "Bovine Viral Diarrhea",
+    "bovine coccidiosis":                   "Coccidiosis",
+    "bovine leukemia virus":                "Bovine Leukemia Virus",
     # Caprine arthritis variants
     "caprine arthritis":                    "Caprine Arthritis Encephalitis",
     "caprine arthritis encephalitis":       "Caprine Arthritis Encephalitis",
     "caprine arthritis encephalitis virus": "Caprine Arthritis Encephalitis",
     "caprine viral arthritis":              "Caprine Arthritis Encephalitis",
-    # Equine influenza variants
+    "caprine pleuropneumonia":              "Caprine Pleuropneumonia",
+    "caprine respiratory disease":          "Caprine Respiratory Disease",
+    # Equine variants
     "equine influenza":                     "Equine Influenza",
     "equine influenza virus":               "Equine Influenza",
-    # Porcine epidemic diarrhea
+    "equine arthritis":                     "Equine Osteoarthritis",
+    "equine osteoarthritis":                "Equine Osteoarthritis",
+    "degenerative joint disease":           "Arthritis",
+    "equine laminitis":                     "Equine Laminitis",
+    "laminitis":                            "Equine Laminitis",
+    "equine leptospirosis":                 "Leptospirosis",
+    "canine leptospirosis":                 "Leptospirosis",
+    "lyme disease":                         "Leptospirosis",
+    "equine lyme disease":                  "Leptospirosis",
+    "equine pneumonia":                     "Pneumonia",
+    "equine west nile virus":               "West Nile Virus",
+    # Porcine variants
+    "swine flu":                            "Swine Influenza",
+    "swine influenza":                      "Swine Influenza",
+    "swine fever":                          "African Swine Fever",
+    "african swine fever":                  "African Swine Fever",
     "porcine epidemic diarrhea":            "Porcine Epidemic Diarrhea",
     "porcine epidemic diarrhea virus":      "Porcine Epidemic Diarrhea",
+    "porcine respiratory disease complex":  "Porcine Respiratory Disease",
+    "porcine reproductive and respiratory syndrome": "Porcine Respiratory Disease",
+    "porcine circovirus disease":           "Porcine Respiratory Disease",
+    "actinobacillus suis":                  "Actinobacillus Pleuropneumonia",
+    "actinobacillus pleuropneumonia":       "Actinobacillus Pleuropneumonia",
     # Canine variants
     "canine cough":                         "Kennel Cough",
     "canine flu":                           "Canine Influenza",
     "canine infectious hepatitis":          "Canine Hepatitis",
+    "canine hepatitis":                     "Canine Hepatitis",
+    "canine parvovirus":                    "Canine Parvovirus",
+    "parvovirus":                           "Canine Parvovirus",
+    "canine distemper":                     "Canine Distemper",
+    "distemper":                            "Canine Distemper",
+    "canine heartworm disease":             "Canine Heartworm Disease",
+    "heartworm disease":                    "Canine Heartworm Disease",
     # Feline variants
     "feline leukemia":                      "Feline Leukemia Virus",
+    "feline leukemia virus":                "Feline Leukemia Virus",
     "feline panleukopenia":                 "Feline Panleukopenia Virus",
+    "feline panleukopenia virus":           "Feline Panleukopenia Virus",
+    "panleukopenia":                        "Feline Panleukopenia Virus",
     "feline chlamydia":                     "Feline Chlamydiosis",
+    "feline chlamydiosis":                  "Feline Chlamydiosis",
     "feline herpesvirus":                   "Feline Viral Rhinotracheitis",
     "feline rhinotracheitis":               "Feline Viral Rhinotracheitis",
+    "feline viral rhinotracheitis":         "Feline Viral Rhinotracheitis",
     "feline upper respiratory infection":   "Feline Respiratory Disease Complex",
     "feline respiratory infection":         "Feline Respiratory Disease Complex",
-    # Scrapie
-    "scrapie":                              "Scrapie Disease",
+    "feline respiratory disease complex":   "Feline Respiratory Disease Complex",
     # Rabbit
     "rabbit calicivirus":                   "Rabbit Viral Hemorrhagic Disease",
     "rabbit hemorrhagic disease":           "Rabbit Viral Hemorrhagic Disease",
+    "rabbit viral hemorrhagic disease":     "Rabbit Viral Hemorrhagic Disease",
+    "viral hemorrhagic disease":            "Rabbit Viral Hemorrhagic Disease",
     # Generic
     "respiratory infection":                "Respiratory Infection",
     "upper respiratory infection":          "Respiratory Infection",
     "respiratory syncytial virus":          "Respiratory Infection",
+    "chronic bronchitis":                   "Respiratory Infection",
     "gastrointestinal infection":           "Gastroenteritis",
-    "distemper":                            "Canine Distemper",
-    "panleukopenia":                        "Feline Panleukopenia Virus",
-    "parvovirus":                           "Canine Parvovirus",
-    "heartworm disease":                    "Canine Heartworm Disease",
-    "lyme disease":                         "Leptospirosis",
+    "enteritis":                            "Gastroenteritis",
+    "gastrointestinal stasis":              "Gastroenteritis",
+    "scrapie":                              "Scrapie Disease",
+    "scrapie disease":                      "Scrapie Disease",
     "tick-borne disease":                   "Tick-Borne Disease",
+    "chlamydia in sheep":                   "Chlamydia in Sheep",
+    "contagious ecthyma":                   "Contagious Ecthyma",
+    "contagious abortion":                  "Contagious Abortion",
 }
 
 def normalise_disease(name):
@@ -316,11 +365,13 @@ def main():
         X, y_enc, test_size=0.2, random_state=42, stratify=y_enc
     )
 
-    print("\nTraining Random Forest classifier…")
+    print("\nTraining Tuned High-Accuracy Random Forest classifier...")
     clf = RandomForestClassifier(
-        n_estimators=300,
+        n_estimators=350,
         max_depth=None,
+        min_samples_split=2,
         min_samples_leaf=1,
+        max_features="sqrt",
         random_state=42,
         class_weight="balanced",
         n_jobs=-1,
@@ -378,7 +429,7 @@ def main():
     with open(os.path.join(OUT_DIR, "symptom_meta.json"), "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2)
 
-    print(f"\nSaved model + label encoder + metadata → {OUT_DIR}")
+    print(f"\nSaved model + label encoder + metadata -> {OUT_DIR}")
     print(f"Classes ({len(classes)}): {classes[:10]} …")
 
 

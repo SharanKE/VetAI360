@@ -1,15 +1,4 @@
-import { useEffect, useState, useRef } from "react";
-import {
-  MapContainer,
-  TileLayer,
-  Marker,
-  Popup,
-  Circle,
-  Polyline,
-  useMap,
-} from "react-leaflet";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
+import { useEffect, useState, useRef, useCallback } from "react";
 import {
   Hospital,
   MapPin,
@@ -33,76 +22,31 @@ import {
   Crosshair,
   ArrowRight,
   Sparkles,
+  Layers,
+  Map as MapIcon,
+  Satellite,
+  Info,
 } from "lucide-react";
 import client from "../api/client";
 import { Card, PageHeader, Button } from "../components/ui";
 
-// Custom Leaflet Pin for User Location with Radar Pulse
-function createUserIcon(isLiveTracking) {
-  const pulseClass = isLiveTracking ? "radar-live-pulse" : "";
-  return L.divIcon({
-    className: "custom-user-pin",
-    html: `
-      <div style="position: relative; display: flex; flex-direction: column; align-items: center;">
-        <div style="position: relative; width: 36px; height: 36px; border-radius: 50%; background: #2563EB; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(37,99,235,0.6); border: 2.5px solid white;">
-          <span style="font-size: 17px;">📍</span>
-          <span style="position: absolute; inset: -4px; border-radius: 50%; border: 2px solid #3B82F6; animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;"></span>
-          ${isLiveTracking ? '<span style="position: absolute; inset: -10px; border-radius: 50%; border: 1.5px dashed #22C55E; animation: spin 4s linear infinite;"></span>' : ''}
-        </div>
-        <div style="margin-top: 3px; background: rgba(17, 24, 39, 0.95); color: white; padding: 2px 7px; border-radius: 6px; font-size: 10px; font-weight: 700; white-space: nowrap; box-shadow: 0 2px 6px rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2);">
-          ${isLiveTracking ? "🟢 Live Tracking" : "You Are Here"}
-        </div>
-      </div>
-    `,
-    iconSize: [40, 56],
-    iconAnchor: [20, 46],
-    popupAnchor: [0, -46],
-  });
-}
-
-// Custom Leaflet Pin for Veterinary Hospitals
-function createHospitalIcon(isNearest, isEmergency, isSelected) {
-  const bgGradient = isNearest
-    ? "linear-gradient(135deg, #F59E0B, #D97706)"
-    : isEmergency
-    ? "linear-gradient(135deg, #DC2626, #B91C1C)"
-    : "linear-gradient(135deg, #059669, #047857)";
-  const iconEmoji = isEmergency ? "🏥" : "🐾";
-  const size = isSelected || isNearest ? 42 : 35;
-
-  return L.divIcon({
-    className: "custom-hospital-pin",
-    html: `
-      <div style="position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer;">
-        <div style="width: ${size}px; height: ${size}px; border-radius: 50%; background: ${bgGradient}; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 16px rgba(0,0,0,0.4); border: 2.5px solid white; transition: transform 0.2s;">
-          <span style="font-size: ${size > 36 ? "19px" : "16px"};">${iconEmoji}</span>
-          ${
-            isNearest
-              ? '<span style="position: absolute; top: -6px; right: -6px; background: #FEF08A; color: #854D0E; font-size: 9px; font-weight: 900; border-radius: 9999px; padding: 1px 5px; border: 1.5px solid white; box-shadow: 0 1px 4px rgba(0,0,0,0.2);">NEAREST</span>'
-              : ""
-          }
-        </div>
-      </div>
-    `,
-    iconSize: [size, size + 16],
-    iconAnchor: [size / 2, size + 10],
-    popupAnchor: [0, -size - 10],
-  });
-}
-
-// Map View Adjuster Helper
-function ChangeView({ center, zoom }) {
-  const map = useMap();
-  useEffect(() => {
-    if (center && center[0] && center[1]) {
-      map.setView(center, zoom || map.getZoom());
-    }
-  }, [center, zoom, map]);
-  return null;
-}
+// Popular Quick-Search Location Chips
+const POPULAR_LOCATIONS = [
+  { label: "🏏 Abdul Kalam Stadium", query: "Abdul Kalam Stadium" },
+  { label: "🏫 PESITM Kotegangur", query: "PESITM" },
+  { label: "🏥 KVAFSU Teaching Hospital", query: "KVAFSU" },
+  { label: "📍 Shivamogga City", query: "Shivamogga" },
+  { label: "🌿 Thirthahalli", query: "Thirthahalli" },
+  { label: "🏭 Bhadravathi", query: "Bhadravathi" },
+  { label: "🌾 Sagar Taluk", query: "Sagar" },
+  { label: "🏛️ Bengaluru", query: "Bengaluru" },
+  { label: "🌿 Mysuru", query: "Mysuru" },
+  { label: "🚜 Hassan", query: "Hassan" },
+  { label: "🏰 Chitradurga", query: "Chitradurga" },
+];
 
 export default function NearbyVets() {
-  // Coordinates default to PESITM / Abdul Kalam Cricket Stadium, Kotegangur
+  // Default coordinates: PESITM / Abdul Kalam Cricket Stadium, Kotegangur, Shivamogga
   const [userCoords, setUserCoords] = useState([13.9785, 75.5265]);
   const [placeLabel, setPlaceLabel] = useState("Abdul Kalam Stadium / Kotegangur, Shivamogga");
   const [isDetectingGps, setIsDetectingGps] = useState(false);
@@ -115,33 +59,206 @@ export default function NearbyVets() {
   const [selectedHospital, setSelectedHospital] = useState(null);
   const [gpsError, setGpsError] = useState("");
 
-  // Real Road Routing state from OSRM
+  // Map display settings: 'roadmap' vs 'hybrid' (satellite)
+  const [mapType, setMapType] = useState("roadmap");
+  // Focal focus: 'hospital' or 'user'
+  const [focusTarget, setFocusTarget] = useState("hospital");
+
+  // Real Road Routing state
   const [roadRoute, setRoadRoute] = useState(null);
   const [routeLoading, setRouteLoading] = useState(false);
   const [showTurnSteps, setShowTurnSteps] = useState(false);
 
-  // Real-Life Monitoring (Continuous GPS Watch Mode)
+  // Real-Life Continuous GPS Watch Mode
   const [isLiveTracking, setIsLiveTracking] = useState(false);
   const [liveSpeed, setLiveSpeed] = useState(0); // km/h
   const [liveHeading, setLiveHeading] = useState(null);
   const watchIdRef = useRef(null);
 
-  // Popular Quick-Search Location Chips
-  const POPULAR_LOCATIONS = [
-    { label: "🏏 Abdul Kalam Stadium", query: "Abdul Kalam Stadium" },
-    { label: "🏫 PESITM Kotegangur", query: "PESITM" },
-    { label: "🏥 KVAFSU Teaching Hospital", query: "KVAFSU" },
-    { label: "📍 Shivamogga City", query: "Shivamogga" },
-    { label: "🌿 Thirthahalli", query: "Thirthahalli" },
-    { label: "🏭 Bhadravathi", query: "Bhadravathi" },
-    { label: "🌾 Sagar Taluk", query: "Sagar" },
-    { label: "🏛️ Bengaluru", query: "Bengaluru" },
-    { label: "🌿 Mysuru", query: "Mysuru" },
-    { label: "🚜 Hassan", query: "Hassan" },
-    { label: "🏰 Chitradurga", query: "Chitradurga" },
-  ];
+  // Google Maps JS API container ref
+  const mapContainerRef = useRef(null);
+  const googleMapInstanceRef = useRef(null);
+  const markersRef = useRef([]);
+  const [jsApiLoaded, setJsApiLoaded] = useState(false);
 
-  // Fetch Hospitals based on coordinates & filters
+  const googleMapsApiKey =
+    import.meta.env.VITE_GOOGLE_MAPS_API_KEY ||
+    (typeof window !== "undefined" && window.__GOOGLE_MAPS_API_KEY__) ||
+    "";
+
+  // ── 1. Dynamically Load Google Maps JS API if API key is provided ──
+  useEffect(() => {
+    if (!googleMapsApiKey) return;
+    if (window.google && window.google.maps) {
+      setJsApiLoaded(true);
+      return;
+    }
+
+    const scriptId = "google-maps-js-sdk";
+    if (document.getElementById(scriptId)) return;
+
+    const script = document.createElement("script");
+    script.id = scriptId;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${googleMapsApiKey}&libraries=marker&v=weekly&loading=async`;
+    script.async = true;
+    script.defer = true;
+    script.onload = () => {
+      setJsApiLoaded(true);
+    };
+    script.onerror = () => {
+      console.warn("Failed to load Google Maps JS API script; fallback to interactive Google Maps embed.");
+    };
+    document.head.appendChild(script);
+  }, [googleMapsApiKey]);
+
+  // ── 2. Initialize / Update Google Maps JS Instance when key is present ──
+  useEffect(() => {
+    if (!jsApiLoaded || !mapContainerRef.current || !window.google?.maps) return;
+
+    const targetLat =
+      focusTarget === "hospital" && selectedHospital
+        ? selectedHospital.latitude
+        : userCoords[0];
+    const targetLng =
+      focusTarget === "hospital" && selectedHospital
+        ? selectedHospital.longitude
+        : userCoords[1];
+
+    if (!googleMapInstanceRef.current) {
+      try {
+        const map = new window.google.maps.Map(mapContainerRef.current, {
+          center: { lat: targetLat, lng: targetLng },
+          zoom: 13,
+          mapId: "DEMO_MAP_ID",
+          internalUsageAttributionIds: ["gmp_git_agentskills_v1"],
+          mapTypeId: mapType === "hybrid" ? window.google.maps.MapTypeId.HYBRID : window.google.maps.MapTypeId.ROADMAP,
+          fullscreenControl: true,
+          streetViewControl: true,
+          zoomControl: true,
+          mapTypeControl: false,
+        });
+        googleMapInstanceRef.current = map;
+      } catch (err) {
+        console.warn("Error initializing Google Maps JS instance:", err);
+      }
+    } else {
+      const map = googleMapInstanceRef.current;
+      map.setCenter({ lat: targetLat, lng: targetLng });
+      map.setMapTypeId(
+        mapType === "hybrid"
+          ? window.google.maps.MapTypeId.HYBRID
+          : window.google.maps.MapTypeId.ROADMAP
+      );
+    }
+
+    // Refresh Advanced Markers
+    renderGoogleMarkers();
+  }, [jsApiLoaded, mapType, focusTarget, selectedHospital, userCoords, hospitals]);
+
+  // Render Advanced Markers on Google Maps JS instance
+  const renderGoogleMarkers = useCallback(() => {
+    const map = googleMapInstanceRef.current;
+    if (!map || !window.google?.maps?.marker) return;
+
+    // Clear previous markers
+    markersRef.current.forEach((m) => {
+      if (m.setMap) m.setMap(null);
+      else if (m.map) m.map = null;
+    });
+    markersRef.current = [];
+
+    const { AdvancedMarkerElement, PinElement } = window.google.maps.marker;
+
+    // User Location Marker
+    try {
+      const userPin = new PinElement({
+        background: "#2563EB",
+        borderColor: "#FFFFFF",
+        glyphColor: "#FFFFFF",
+        scale: 1.15,
+      });
+
+      const userMarker = new AdvancedMarkerElement({
+        map,
+        position: { lat: userCoords[0], lng: userCoords[1] },
+        title: "Your Location: " + placeLabel,
+        content: userPin.element || userPin,
+      });
+
+      const userInfowindow = new window.google.maps.InfoWindow({
+        content: `
+          <div style="padding: 6px; font-family: system-ui, sans-serif; font-size: 12px;">
+            <b style="color: #1D4ED8;">📍 Your Current Position</b><br/>
+            <span style="color: #4B5563;">${placeLabel}</span>
+          </div>
+        `,
+      });
+      userMarker.addListener("click", () => {
+        userInfowindow.open({ anchor: userMarker, map });
+      });
+
+      markersRef.current.push(userMarker);
+    } catch (e) {
+      console.warn("AdvancedMarkerElement for user location failed:", e);
+    }
+
+    // Hospital Markers
+    hospitals.forEach((h) => {
+      try {
+        const isNearest = nearest && h.id === nearest.id;
+        const isSelected = selectedHospital && h.id === selectedHospital.id;
+        const isEmergency = h.isEmergency24x7;
+
+        const pinColor = isNearest ? "#D97706" : isEmergency ? "#DC2626" : "#059669";
+        const pinGlyph = isEmergency ? "🏥" : "🐾";
+
+        const pin = new PinElement({
+          background: pinColor,
+          borderColor: isSelected ? "#FBBF24" : "#FFFFFF",
+          glyph: pinGlyph,
+          scale: isSelected || isNearest ? 1.25 : 1.0,
+        });
+
+        const marker = new AdvancedMarkerElement({
+          map,
+          position: { lat: h.latitude, lng: h.longitude },
+          title: h.name,
+          content: pin.element || pin,
+        });
+
+        const navUrl = `https://www.google.com/maps/dir/?api=1&origin=${userCoords[0]},${userCoords[1]}&destination=${encodeURIComponent(h.name + ", " + h.address)}&travelmode=driving`;
+
+        const info = new window.google.maps.InfoWindow({
+          content: `
+            <div style="padding: 8px; font-family: system-ui, sans-serif; max-width: 250px;">
+              <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: ${pinColor}; margin-bottom: 2px;">
+                ${isNearest ? "⭐ Closest Facility" : isEmergency ? "🚨 24/7 Emergency" : h.type}
+              </div>
+              <h4 style="font-size: 13px; font-weight: 700; margin: 0 0 4px; color: #111827;">${h.name}</h4>
+              <p style="font-size: 11px; color: #4B5563; margin: 0 0 6px;">${h.address}</p>
+              <div style="background: #ECFDF5; border: 1px solid #A7F3D0; padding: 4px 6px; border-radius: 6px; font-size: 11px; font-weight: 600; color: #065F46; margin-bottom: 8px;">
+                Distance: ${h.distanceKm} km · ${h.estimatedDrive}
+              </div>
+              <a href="${navUrl}" target="_blank" rel="noreferrer" style="display: block; text-align: center; background: #2563EB; color: white; padding: 6px; border-radius: 6px; text-decoration: none; font-size: 11px; font-weight: 700;">
+                Turn-by-Turn Navigation
+              </a>
+            </div>
+          `,
+        });
+
+        marker.addListener("click", () => {
+          setSelectedHospital(h);
+          info.open({ anchor: marker, map });
+        });
+
+        markersRef.current.push(marker);
+      } catch (err) {
+        console.warn("AdvancedMarkerElement for hospital failed:", err);
+      }
+    });
+  }, [hospitals, nearest, selectedHospital, userCoords, placeLabel]);
+
+  // ── 3. Fetch Hospitals based on coordinates & filters ──
   async function loadHospitals(lat, lng, queryText, radius = radiusKm, filter = filterType) {
     setLoading(true);
     setGpsError("");
@@ -181,7 +298,7 @@ export default function NearbyVets() {
     }
   }
 
-  // Fetch Real Road Driving Route whenever selectedHospital or userCoords change
+  // ── 4. Fetch Driving Route whenever selectedHospital or userCoords change ──
   useEffect(() => {
     if (!selectedHospital || !userCoords || !userCoords[0] || !userCoords[1]) {
       setRoadRoute(null);
@@ -196,87 +313,39 @@ export default function NearbyVets() {
     const toLat = selectedHospital.latitude;
     const toLng = selectedHospital.longitude;
 
-    // Fast OSRM Road Routing API
-    const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}?overview=full&geometries=geojson&steps=true`;
-
-    fetch(osrmUrl)
-      .then((r) => r.json())
-      .then((data) => {
-        if (!isMounted) return;
-        if (data.code === "Ok" && data.routes && data.routes[0]) {
-          const r = data.routes[0];
-          const coordinates = r.geometry.coordinates.map(([lon, lat]) => [lat, lon]);
-          const distanceKm = +(r.distance / 1000).toFixed(1);
-          const durationMins = Math.max(1, Math.round(r.duration / 60));
-
-          const steps = (r.legs[0]?.steps || [])
-            .map((s) => {
-              let instruction = "";
-              const modifier = s.maneuver.modifier ? ` ${s.maneuver.modifier}` : "";
-              if (s.maneuver.type === "depart") instruction = "Start out from your position";
-              else if (s.maneuver.type === "arrive") instruction = `Arrive at ${selectedHospital.name}`;
-              else if (s.maneuver.type === "roundabout") instruction = `Enter roundabout and take exit${modifier}`;
-              else instruction = `${s.maneuver.type}${modifier}`;
-
-              if (s.name) instruction += ` onto ${s.name}`;
-
-              return {
-                instruction: instruction.charAt(0).toUpperCase() + instruction.slice(1),
-                distanceKm: +(s.distance / 1000).toFixed(2),
-                distanceMeters: Math.round(s.distance),
-                durationSec: Math.round(s.duration),
-              };
-            })
-            .filter((s) => s.distanceMeters > 0 || s.instruction.includes("Arrive"));
-
-          setRoadRoute({
-            status: "success",
-            coordinates,
-            distanceKm,
-            durationMins,
-            summary: r.legs[0]?.summary || "Direct Driving Road",
-            steps,
-          });
-        } else {
-          fallbackBackendRoute();
-        }
+    client
+      .get(`/hospitals/route?fromLat=${fromLat}&fromLng=${fromLng}&toLat=${toLat}&toLng=${toLng}`)
+      .then((res) => {
+        if (isMounted) setRoadRoute(res.data);
       })
       .catch(() => {
-        fallbackBackendRoute();
+        if (isMounted) {
+          setRoadRoute({
+            status: "estimated",
+            distanceKm: selectedHospital.distanceKm,
+            durationMins: Math.round(selectedHospital.distanceKm * 2.2),
+            summary: "Estimated Direct Route",
+            steps: [
+              {
+                instruction: `Proceed towards ${selectedHospital.name}`,
+                distanceKm: selectedHospital.distanceKm,
+                distanceMeters: Math.round(selectedHospital.distanceKm * 1000),
+              },
+              { instruction: "Arrive at veterinary hospital", distanceKm: 0, distanceMeters: 0 },
+            ],
+          });
+        }
       })
       .finally(() => {
         if (isMounted) setRouteLoading(false);
       });
-
-    function fallbackBackendRoute() {
-      client
-        .get(`/hospitals/route?fromLat=${fromLat}&fromLng=${fromLng}&toLat=${toLat}&toLng=${toLng}`)
-        .then((res) => {
-          if (isMounted) setRoadRoute(res.data);
-        })
-        .catch(() => {
-          if (isMounted) {
-            setRoadRoute({
-              status: "fallback",
-              coordinates: [userCoords, [toLat, toLng]],
-              distanceKm: selectedHospital.distanceKm,
-              durationMins: Math.round(selectedHospital.distanceKm * 2.2),
-              summary: "Direct Distance Line",
-              steps: [
-                { instruction: "Proceed towards hospital", distanceKm: selectedHospital.distanceKm, distanceMeters: Math.round(selectedHospital.distanceKm * 1000) },
-                { instruction: "Arrive at veterinary hospital", distanceKm: 0, distanceMeters: 0 }
-              ],
-            });
-          }
-        });
-    }
 
     return () => {
       isMounted = false;
     };
   }, [selectedHospital, userCoords[0], userCoords[1]]);
 
-  // Single-Shot GPS Detection
+  // ── 5. Single-Shot GPS Detection ──
   function handleDetectLiveGps() {
     if (!navigator.geolocation) {
       setGpsError("Geolocation is not supported by your browser.");
@@ -298,25 +367,29 @@ export default function NearbyVets() {
       (error) => {
         setIsDetectingGps(false);
         console.warn("Geolocation error:", error);
-        let msg = "Could not access location. Please allow location access or choose a city below.";
-        if (error.code === 1) msg = "Location permission denied. Please search your city or taluk below.";
-        setGpsError(msg);
+        if (error.code === 1) {
+          setGpsError("Location access denied. Using Abdul Kalam Stadium / Shivamogga coordinates.");
+        } else {
+          setGpsError("Could not retrieve GPS position. Using Shivamogga coordinates.");
+        }
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 10000 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   }
 
-  // Real-Life Continuous GPS Monitoring Toggle (watchPosition)
-  function toggleLiveMonitoring() {
+  // ── 6. Continuous Real-Life Watch Mode ──
+  function toggleLiveTracking() {
     if (isLiveTracking) {
       if (watchIdRef.current !== null) {
         navigator.geolocation.clearWatch(watchIdRef.current);
         watchIdRef.current = null;
       }
       setIsLiveTracking(false);
+      setLiveSpeed(0);
+      setLiveHeading(null);
     } else {
       if (!navigator.geolocation) {
-        setGpsError("Geolocation is not supported by your device.");
+        setGpsError("Geolocation is not supported by your browser.");
         return;
       }
       setIsLiveTracking(true);
@@ -326,24 +399,24 @@ export default function NearbyVets() {
         (pos) => {
           const { latitude, longitude, speed, heading } = pos.coords;
           setUserCoords([latitude, longitude]);
-          setPlaceLabel("Live GPS Telemetry Active");
-          if (speed !== null && speed !== undefined && speed >= 0) {
-            setLiveSpeed(Math.round(speed * 3.6)); // convert m/s to km/h
+          if (speed !== null && !isNaN(speed)) {
+            setLiveSpeed(Math.round(speed * 3.6)); // m/s to km/h
           }
-          if (heading !== null && heading !== undefined) {
+          if (heading !== null && !isNaN(heading)) {
             setLiveHeading(Math.round(heading));
           }
         },
         (err) => {
-          console.warn("Live tracking watchPosition error:", err);
-          setGpsError("Live GPS signal weak. Continuing with last recorded location.");
+          console.warn("Watch position error:", err);
+          setGpsError("Live GPS watch interrupted: " + err.message);
+          setIsLiveTracking(false);
         },
-        { enableHighAccuracy: true, maximumAge: 1500, timeout: 15000 }
+        { enableHighAccuracy: true, maximumAge: 2000, timeout: 8000 }
       );
     }
   }
 
-  // Cleanup watchPosition on unmount
+  // Clean up GPS watcher on unmount
   useEffect(() => {
     return () => {
       if (watchIdRef.current !== null) {
@@ -352,148 +425,100 @@ export default function NearbyVets() {
     };
   }, []);
 
-  // Handle City / Area / Hospital Search
+  // Initial load
+  useEffect(() => {
+    loadHospitals(userCoords[0], userCoords[1], searchQuery, radiusKm, filterType);
+  }, []);
+
+  // Quick Location Select
+  function handleQuickLocationSelect(query) {
+    setSearchQuery(query);
+    loadHospitals(userCoords[0], userCoords[1], query, radiusKm, filterType);
+  }
+
+  // Handle Search Submit
   function handleSearchSubmit(e) {
     e.preventDefault();
     if (!searchQuery.trim()) return;
     loadHospitals(userCoords[0], userCoords[1], searchQuery.trim(), radiusKm, filterType);
   }
 
-  function handleQuickLocationSelect(q) {
-    setSearchQuery(q);
-    loadHospitals(userCoords[0], userCoords[1], q, radiusKm, filterType);
-  }
+  // Target coordinates for map display
+  const targetHospitalLat = selectedHospital ? selectedHospital.latitude : userCoords[0];
+  const targetHospitalLng = selectedHospital ? selectedHospital.longitude : userCoords[1];
 
-  // Initial Load
-  useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const lat = pos.coords.latitude;
-          const lng = pos.coords.longitude;
-          setUserCoords([lat, lng]);
-          setPlaceLabel("Your Live GPS Location");
-          loadHospitals(lat, lng, "");
-        },
-        () => {
-          // Fallback to default Shivamogga/PESITM region
-          loadHospitals(userCoords[0], userCoords[1], "");
-        },
-        { timeout: 5000 }
-      );
-    } else {
-      loadHospitals(userCoords[0], userCoords[1], "");
-    }
-  }, []);
+  // Active Google Maps Direct Turn-by-Turn Navigation URL
+  const activeGoogleMapsNavUrl = selectedHospital
+    ? `https://www.google.com/maps/dir/?api=1&origin=${userCoords[0]},${userCoords[1]}&destination=${encodeURIComponent(selectedHospital.name + ", " + selectedHospital.address)}&travelmode=driving`
+    : `https://www.google.com/maps/search/?api=1&query=Veterinary+Hospital+near+${userCoords[0]},${userCoords[1]}`;
 
-  // Direct Google Maps Driving Directions URL (using exact hospital name and address to prevent Google Maps from guessing nearby houses or parlours)
-  const activeGoogleMapsUrl = selectedHospital
-    ? (selectedHospital.googleMapsUrl || `https://www.google.com/maps/dir/?api=1&origin=${userCoords[0]},${userCoords[1]}&destination=${encodeURIComponent(selectedHospital.name + ", " + selectedHospital.address)}&travelmode=driving`)
-    : "";
+  // Interactive Google Maps Embed URL (Works out-of-the-box with zero auth & high precision)
+  const embedMapTypeParam = mapType === "hybrid" ? "k" : "m";
+  const embedCenterLat = focusTarget === "hospital" && selectedHospital ? targetHospitalLat : userCoords[0];
+  const embedCenterLng = focusTarget === "hospital" && selectedHospital ? targetHospitalLng : userCoords[1];
+  const googleMapsEmbedUrl = `https://maps.google.com/maps?q=${embedCenterLat},${embedCenterLng}&t=${embedMapTypeParam}&z=14&output=embed`;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6 max-w-7xl mx-auto px-4 py-4">
       {/* ── Page Header ── */}
       <PageHeader
-        title="Nearest Veterinary Hospitals & Emergency Care"
-        subtitle="Locate verified government veterinary polyclinics, university hospitals, and 24/7 cattle emergency centers with real driving road navigation."
+        title="Veterinary Hospitals & Emergency Care"
+        subtitle="Real-time Google Maps navigation to verified government polyclinics, university teaching hospitals, and 24/7 livestock care centres"
+        badge={
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 border border-emerald-300 px-3 py-1 text-xs font-bold text-emerald-800 shadow-sm">
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            Google Maps Powered
+          </span>
+        }
         action={
           <div className="flex items-center gap-2">
             <Button
-              onClick={toggleLiveMonitoring}
-              variant={isLiveTracking ? "secondary" : "secondary"}
-              className={`flex items-center gap-1.5 text-xs font-bold transition-all shadow-sm ${
+              variant={isLiveTracking ? "primary" : "secondary"}
+              size="sm"
+              onClick={toggleLiveTracking}
+              className={`flex items-center gap-1.5 text-xs font-semibold ${
                 isLiveTracking
-                  ? "bg-emerald-600 hover:bg-emerald-700 text-white border-transparent"
-                  : "bg-white hover:bg-gray-50 text-gray-700 border-gray-200"
+                  ? "bg-emerald-600 hover:bg-emerald-700 text-white animate-pulse"
+                  : ""
               }`}
             >
-              <Radio size={15} className={isLiveTracking ? "animate-pulse text-white" : "text-emerald-600"} />
-              <span>{isLiveTracking ? "📡 Live Tracking ON" : "Start Live Monitoring"}</span>
+              <Radio size={14} className={isLiveTracking ? "animate-spin" : ""} />
+              {isLiveTracking ? `Live GPS: ${liveSpeed} km/h` : "Start Live GPS"}
             </Button>
-
             <Button
+              variant="secondary"
+              size="sm"
               onClick={handleDetectLiveGps}
               disabled={isDetectingGps}
-              className="flex items-center gap-1.5 text-xs font-bold shadow-sm"
+              className="flex items-center gap-1.5 text-xs font-semibold"
             >
-              <Locate size={15} className={isDetectingGps ? "animate-spin" : ""} />
-              <span>{isDetectingGps ? "Detecting GPS…" : "📍 My Live GPS"}</span>
+              <Locate size={14} className={isDetectingGps ? "animate-spin text-pasture-600" : ""} />
+              {isDetectingGps ? "Detecting GPS…" : "Locate Me"}
             </Button>
           </div>
         }
       />
 
-      {/* ── Live Monitoring Telemetry Bar (Active when tracking is on) ── */}
-      {isLiveTracking && (
-        <div className="flex items-center justify-between rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2.5 shadow-sm text-emerald-900 text-xs animate-fade-in">
-          <div className="flex items-center gap-2.5 font-semibold">
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-600"></span>
-            </span>
-            <span>Real-Life GPS Telemetry Active</span>
-            <span className="text-gray-400">|</span>
-            <span className="flex items-center gap-1 text-gray-700 font-mono">
-              <Gauge size={13} className="text-emerald-700" /> Speed: {liveSpeed} km/h
-            </span>
-            {liveHeading !== null && (
-              <span className="flex items-center gap-1 text-gray-700 font-mono">
-                <Compass size={13} className="text-emerald-700" /> Heading: {liveHeading}°
-              </span>
-            )}
-          </div>
-          <span className="text-[11px] font-medium text-emerald-800">
-            Dynamically recalculating road route as you move
-          </span>
-        </div>
-      )}
-
-      {/* ── 24/7 Animal Emergency Helpline Banner (1962) ── */}
-      <div className="flex flex-col md:flex-row items-center justify-between gap-4 rounded-xl border border-red-200 bg-gradient-to-r from-red-50 via-orange-50 to-amber-50 px-5 py-3.5 shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-alertred text-white shadow-md">
-            <Ambulance size={22} className="animate-pulse" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="rounded bg-alertred px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-white">
-                24/7 National Emergency
-              </span>
-              <p className="font-display font-bold text-gray-900 text-sm">
-                Mobile Veterinary Hospital & Ambulance Helpline
-              </p>
-            </div>
-            <p className="text-xs text-gray-600 mt-0.5">
-              Toll-free government emergency animal healthcare for critical livestock emergencies, dystocia/calving, and trauma.
-            </p>
-          </div>
-        </div>
-        <a
-          href="tel:1962"
-          className="flex items-center gap-2 rounded-lg bg-alertred px-4 py-2 text-xs font-bold text-white shadow hover:bg-red-700 transition"
-        >
-          <PhoneCall size={14} /> Call Emergency Helpline: 1962
-        </a>
-      </div>
-
-      {/* ── Search & Filter Controls ── */}
-      <Card className="p-4 space-y-3">
-        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
-          {/* Search Form */}
+      {/* ── Search, Radius, & Filter Controls ── */}
+      <Card className="p-4 space-y-3.5 shadow-sm border border-gray-200">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+          {/* Search Box */}
           <form onSubmit={handleSearchSubmit} className="flex-1 flex items-center gap-2">
             <div className="relative flex-1">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Search
+                size={16}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              />
               <input
                 type="text"
-                placeholder="Search city, taluk, village, or hospital name (e.g. PESITM, Shimoga, Hebbal, Bhadravathi, Sagar)..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full rounded-lg border border-gray-200 py-2.5 pl-9 pr-4 text-xs focus:border-pasture-500 focus:outline-none focus:ring-1 focus:ring-pasture-500"
+                placeholder="Search town, landmark, college (e.g. Kotegangur, PESITM, Shivamogga, KVAFSU)…"
+                className="w-full rounded-xl border border-gray-200 bg-gray-50/70 pl-9 pr-3 py-2 text-xs text-gray-800 placeholder-gray-400 focus:border-pasture-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-pasture-500 transition"
               />
             </div>
-            <Button type="submit" variant="primary" className="py-2.5 text-xs font-bold">
-              Find Hospital
+            <Button type="submit" size="sm" className="text-xs font-semibold px-4">
+              Search
             </Button>
           </form>
 
@@ -580,199 +605,180 @@ export default function NearbyVets() {
         {/* ── Left Map Canvas (7 cols on Desktop) ── */}
         <div className="lg:col-span-7 space-y-3">
           <Card className="p-0 overflow-hidden shadow-md border border-gray-200 relative">
-            <div className="h-[600px] w-full relative">
-              <MapContainer
-                center={userCoords}
-                zoom={12}
-                scrollWheelZoom={true}
-                className="h-full w-full z-0"
-              >
-                <ChangeView
-                  center={
-                    selectedHospital
-                      ? [selectedHospital.latitude, selectedHospital.longitude]
-                      : userCoords
-                  }
-                  zoom={12}
+            {/* Map Controls Header Bar */}
+            <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50/90 px-3.5 py-2 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-gray-800 flex items-center gap-1.5">
+                  <span className="flex h-5 w-5 items-center justify-center rounded bg-blue-600 text-white text-[10px] font-black">
+                    G
+                  </span>
+                  Google Maps
+                </span>
+                <span className="text-gray-300">|</span>
+                <span className="text-[11px] text-gray-500 font-medium truncate max-w-[200px]">
+                  {selectedHospital ? selectedHospital.name : placeLabel}
+                </span>
+              </div>
+
+              {/* View & Layer Toggles */}
+              <div className="flex items-center gap-1.5">
+                {/* Focus toggle */}
+                <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setFocusTarget("hospital")}
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold transition ${
+                      focusTarget === "hospital"
+                        ? "bg-pasture-700 text-white shadow-xs"
+                        : "text-gray-600 hover:text-gray-900"
+                    }`}
+                  >
+                    Hospital
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFocusTarget("user")}
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold transition ${
+                      focusTarget === "user"
+                        ? "bg-pasture-700 text-white shadow-xs"
+                        : "text-gray-600 hover:text-gray-900"
+                    }`}
+                  >
+                    My GPS
+                  </button>
+                </div>
+
+                {/* Map Type toggle (Roadmap vs Satellite) */}
+                <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setMapType("roadmap")}
+                    className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold transition ${
+                      mapType === "roadmap"
+                        ? "bg-blue-600 text-white shadow-xs"
+                        : "text-gray-600 hover:text-gray-900"
+                    }`}
+                  >
+                    <MapIcon size={11} /> Road
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMapType("hybrid")}
+                    className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold transition ${
+                      mapType === "hybrid"
+                        ? "bg-blue-600 text-white shadow-xs"
+                        : "text-gray-600 hover:text-gray-900"
+                    }`}
+                  >
+                    <Satellite size={11} /> Satellite
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Google Maps Container */}
+            <div className="h-[580px] w-full relative bg-gray-100">
+              {jsApiLoaded ? (
+                // Google Maps JavaScript API Native Canvas
+                <div ref={mapContainerRef} className="h-full w-full" />
+              ) : (
+                // Interactive Google Maps Embed (Zero-config, high-reliability, no grey tiles)
+                <iframe
+                  title="Google Maps Veterinary Hospital View"
+                  src={googleMapsEmbedUrl}
+                  className="h-full w-full border-0"
+                  loading="lazy"
+                  allowFullScreen
+                  referrerPolicy="no-referrer-when-downgrade"
                 />
-                <TileLayer
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                />
+              )}
 
-                {/* User Location Marker with Live Indicator */}
-                <Marker position={userCoords} icon={createUserIcon(isLiveTracking)}>
-                  <Popup>
-                    <div className="p-1">
-                      <p className="font-bold text-xs text-blue-700 flex items-center gap-1">
-                        📍 Your Current Position
-                      </p>
-                      <p className="text-[11px] text-gray-600 mt-0.5">{placeLabel}</p>
-                      {isLiveTracking && (
-                        <p className="text-[10px] text-emerald-700 font-semibold mt-1">
-                          🟢 Live Tracking: {liveSpeed} km/h
-                        </p>
-                      )}
-                    </div>
-                  </Popup>
-                </Marker>
-
-                {/* Radius Coverage Circle */}
-                <Circle
-                  center={userCoords}
-                  radius={radiusKm * 1000}
-                  pathOptions={{
-                    color: "#2563EB",
-                    fillColor: "#3B82F6",
-                    fillOpacity: 0.04,
-                    weight: 1.5,
-                    dashArray: "4, 6",
-                  }}
-                />
-
-                {/* Real Road Driving Route Polyline from OSRM */}
-                {roadRoute && roadRoute.coordinates && roadRoute.coordinates.length > 0 && (
-                  <>
-                    {/* Outer Road Glow / Halo */}
-                    <Polyline
-                      positions={roadRoute.coordinates}
-                      pathOptions={{
-                        color: "#2563EB",
-                        weight: 7,
-                        opacity: 0.35,
-                        lineCap: "round",
-                        lineJoin: "round",
-                      }}
-                    />
-                    {/* Inner Crisp High-Visibility Road Line */}
-                    <Polyline
-                      positions={roadRoute.coordinates}
-                      pathOptions={{
-                        color: "#1D4ED8",
-                        weight: 4,
-                        opacity: 0.95,
-                        lineCap: "round",
-                        lineJoin: "round",
-                      }}
-                    />
-                  </>
-                )}
-
-                {/* Hospital Markers */}
-                {hospitals.map((hospital, idx) => {
-                  const isNearestHospital = nearest && hospital.id === nearest.id;
-                  const isSelected = selectedHospital && hospital.id === selectedHospital.id;
-
-                  return (
-                    <Marker
-                      key={hospital.id || idx}
-                      position={[hospital.latitude, hospital.longitude]}
-                      icon={createHospitalIcon(isNearestHospital, hospital.isEmergency24x7, isSelected)}
-                      eventHandlers={{
-                        click: () => {
-                          setSelectedHospital(hospital);
-                        },
-                      }}
-                    >
-                      <Popup>
-                        <div className="p-2 space-y-2 min-w-[220px]">
-                          <div>
-                            <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-amber-700">
-                              {isNearestHospital ? "⭐ Closest Facility" : hospital.type}
-                            </div>
-                            <h4 className="font-bold text-ink text-xs mt-0.5">{hospital.name}</h4>
-                            <p className="text-[11px] text-gray-500 mt-0.5">{hospital.address}</p>
-                          </div>
-
-                          <div className="rounded bg-emerald-50 border border-emerald-200 px-2 py-1 text-emerald-800 text-[11px] font-semibold flex items-center justify-between">
-                            <span>Distance: {hospital.distanceKm} km</span>
-                            <span>{hospital.estimatedDrive}</span>
-                          </div>
-
-                          <div className="pt-2 flex flex-col gap-1 border-t border-gray-100">
-                            <a
-                              href={hospital.googleMapsUrl || `https://www.google.com/maps/dir/?api=1&origin=${userCoords[0]},${userCoords[1]}&destination=${encodeURIComponent(hospital.name + ", " + hospital.address)}&travelmode=driving`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="flex items-center justify-center gap-1 rounded bg-pasture-600 py-1.5 text-xs font-semibold text-white hover:bg-pasture-700 transition"
-                            >
-                              <Navigation size={12} /> Get Directions
-                            </a>
-                            <a
-                              href={`tel:${hospital.phone}`}
-                              className="flex items-center justify-center gap-1 rounded border border-gray-300 bg-white py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition"
-                            >
-                              <PhoneCall size={12} /> Call: {hospital.phone}
-                            </a>
-                          </div>
-                        </div>
-                      </Popup>
-                    </Marker>
-                  );
-                })}
-              </MapContainer>
-
-              {/* Road Route Floating Overlay on Map */}
-              {selectedHospital && roadRoute && (
-                <div className="absolute bottom-4 left-4 right-4 z-[400] rounded-xl border border-white/80 bg-white/95 p-3.5 shadow-xl backdrop-blur-md">
-                  <div className="flex items-center justify-between gap-3">
+              {/* Floating Live Navigation & Route Overlay on Map */}
+              {selectedHospital && (
+                <div className="absolute bottom-3 left-3 right-3 z-20 rounded-2xl border border-white/90 bg-white/95 p-3.5 shadow-2xl backdrop-blur-md">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-pasture-700 text-white shadow-md">
-                        <RouteIcon size={20} />
+                      <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-md">
+                        <Navigation size={22} />
                       </div>
-                      <div>
+                      <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono text-sm font-extrabold text-blue-700">
-                            {roadRoute.distanceKm} km
+                          <span className="font-mono text-base font-extrabold text-blue-700">
+                            {selectedHospital.distanceKm} km
                           </span>
                           <span className="text-gray-300">·</span>
                           <span className="text-xs font-bold text-emerald-700">
-                            ~{roadRoute.durationMins} mins drive
+                            ~{selectedHospital.estimatedDrive}
                           </span>
+                          {selectedHospital.isEmergency24x7 && (
+                            <span className="rounded-full bg-red-100 border border-red-200 px-2 py-0.5 text-[9px] font-extrabold uppercase text-red-700">
+                              24/7 Emergency
+                            </span>
+                          )}
                         </div>
-                        <p className="text-[11px] text-gray-600 line-clamp-1">
-                          Route to <span className="font-semibold">{selectedHospital.name}</span> ({roadRoute.summary})
+                        <p className="text-xs font-bold text-gray-900 truncate mt-0.5">
+                          {selectedHospital.name}
+                        </p>
+                        <p className="text-[11px] text-gray-500 truncate">
+                          {selectedHospital.address}
                         </p>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      {roadRoute.steps && roadRoute.steps.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => setShowTurnSteps(!showTurnSteps)}
-                          className="rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-100 transition"
-                        >
-                          {showTurnSteps ? "Hide Turns" : "View Steps"}
-                        </button>
-                      )}
+                    <div className="flex items-center gap-2 flex-shrink-0">
                       <a
-                        href={activeGoogleMapsUrl}
+                        href={`tel:${selectedHospital.phone}`}
+                        className="flex items-center gap-1.5 rounded-xl border border-gray-300 bg-white hover:bg-gray-50 px-3 py-2 text-xs font-bold text-gray-800 shadow-sm transition"
+                      >
+                        <PhoneCall size={13} className="text-emerald-600" />
+                        <span>Call</span>
+                      </a>
+                      <a
+                        href={activeGoogleMapsNavUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="flex items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 px-3 py-1.5 text-xs font-bold text-white shadow-md transition"
+                        className="flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 px-4 py-2 text-xs font-bold text-white shadow-md transition"
                       >
-                        <Navigation size={13} />
-                        <span>Google Maps</span>
+                        <Navigation size={14} />
+                        <span>Navigate in Google Maps</span>
+                        <ExternalLink size={12} className="opacity-80" />
                       </a>
                     </div>
                   </div>
 
-                  {/* Expandable Turn-by-Turn Road Instructions */}
-                  {showTurnSteps && roadRoute.steps && roadRoute.steps.length > 0 && (
-                    <div className="mt-3 max-h-48 overflow-y-auto border-t border-gray-100 pt-2.5 space-y-1.5 scrollbar-thin">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                        Turn-by-Turn Navigation Steps ({roadRoute.steps.length} turns)
-                      </p>
+                  {/* Route Steps Summary Toggle */}
+                  {roadRoute && (
+                    <div className="mt-2.5 border-t border-gray-100 pt-2 flex items-center justify-between text-[11px]">
+                      <span className="text-gray-500 font-medium">
+                        Route: <strong className="text-gray-700">{roadRoute.summary || "Google Direct Path"}</strong>
+                      </span>
+                      {roadRoute.steps && roadRoute.steps.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setShowTurnSteps(!showTurnSteps)}
+                          className="text-blue-600 font-bold hover:underline"
+                        >
+                          {showTurnSteps ? "Hide Turn Steps" : `View ${roadRoute.steps.length} Steps`}
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Turn-by-Turn Steps Dropdown */}
+                  {showTurnSteps && roadRoute?.steps && roadRoute.steps.length > 0 && (
+                    <div className="mt-2 max-h-40 overflow-y-auto border-t border-gray-100 pt-2 space-y-1.5 scrollbar-thin">
                       {roadRoute.steps.map((st, i) => (
-                        <div key={i} className="flex items-start justify-between text-xs py-1 border-b border-gray-50">
+                        <div
+                          key={i}
+                          className="flex items-start justify-between text-[11px] py-1 border-b border-gray-50"
+                        >
                           <div className="flex items-start gap-2">
                             <span className="font-mono text-[10px] font-bold text-gray-400 mt-0.5">
                               {i + 1}.
                             </span>
                             <span className="text-gray-800 font-medium">{st.instruction}</span>
                           </div>
-                          <span className="font-mono text-[11px] text-gray-500 font-semibold whitespace-nowrap ml-2">
+                          <span className="font-mono text-[10px] text-gray-500 font-semibold whitespace-nowrap ml-2">
                             {st.distanceKm > 0 ? `${st.distanceKm} km` : ""}
                           </span>
                         </div>
@@ -787,9 +793,9 @@ export default function NearbyVets() {
 
         {/* ── Right Hospital List (5 cols on Desktop) ── */}
         <div className="lg:col-span-5 space-y-3">
-          {/* Nearest Facility Card */}
+          {/* Nearest Facility Highlight Card */}
           {nearest && (
-            <div className="rounded-2xl border-2 border-amber-300 bg-gradient-to-br from-amber-50/70 via-white to-amber-50/40 p-4 shadow-md">
+            <div className="rounded-2xl border-2 border-amber-300 bg-gradient-to-br from-amber-50/80 via-white to-amber-50/40 p-4 shadow-md">
               <div className="flex items-center justify-between">
                 <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/20 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-amber-900 border border-amber-300">
                   <Sparkles size={11} className="text-amber-600" /> Closest Veterinary Center to You
@@ -821,7 +827,7 @@ export default function NearbyVets() {
                   href={`https://www.google.com/maps/dir/?api=1&origin=${userCoords[0]},${userCoords[1]}&destination=${nearest.latitude},${nearest.longitude}&travelmode=driving`}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex items-center justify-center gap-1.5 rounded-xl bg-pasture-700 hover:bg-pasture-800 py-2.5 text-xs font-bold text-white shadow-sm transition"
+                  className="flex items-center justify-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 py-2.5 text-xs font-bold text-white shadow-sm transition"
                 >
                   <Navigation size={13} /> Turn-by-Turn GPS
                 </a>
@@ -861,15 +867,18 @@ export default function NearbyVets() {
                 return (
                   <div
                     key={hospital.id}
-                    onClick={() => setSelectedHospital(hospital)}
+                    onClick={() => {
+                      setSelectedHospital(hospital);
+                      setFocusTarget("hospital");
+                    }}
                     className={`cursor-pointer rounded-xl border p-3.5 transition ${
                       isSelected
-                        ? "border-pasture-500 bg-pasture-50/70 shadow-md ring-1 ring-pasture-400"
+                        ? "border-blue-500 bg-blue-50/60 shadow-md ring-1 ring-blue-400"
                         : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50/50"
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span
                             className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${
@@ -884,7 +893,7 @@ export default function NearbyVets() {
                             {hospital.type}
                           </span>
                         </div>
-                        <h4 className="font-bold text-ink text-xs mt-1">{hospital.name}</h4>
+                        <h4 className="font-bold text-ink text-xs mt-1 truncate">{hospital.name}</h4>
                       </div>
 
                       {/* Distance pill */}
@@ -920,9 +929,9 @@ export default function NearbyVets() {
                           target="_blank"
                           rel="noreferrer"
                           onClick={(e) => e.stopPropagation()}
-                          className="flex items-center gap-1 rounded bg-pasture-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-pasture-700 shadow-sm"
+                          className="flex items-center gap-1 rounded bg-blue-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-blue-700 shadow-sm"
                         >
-                          <Navigation size={10} /> Directions
+                          <Navigation size={10} /> Google Maps
                         </a>
                       </div>
                     </div>

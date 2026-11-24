@@ -833,7 +833,7 @@ function estimateTravelTime(distanceKm) {
   return hours > 0 ? `${hours}h ${mins}m` : `${mins} mins`;
 }
 
-// Real road driving routing via OSRM (Open Source Routing Machine)
+// Real road driving routing via Google Routes API or OSRM
 async function getDrivingRoute(fromLat, fromLng, toLat, toLng) {
   if (!fromLat || !fromLng || !toLat || !toLng) return null;
   const fLat = parseFloat(fromLat);
@@ -841,6 +841,56 @@ async function getDrivingRoute(fromLat, fromLng, toLat, toLng) {
   const tLat = parseFloat(toLat);
   const tLng = parseFloat(toLng);
 
+  // 1. Google Routes API (Preferred when Google Maps API key is configured)
+  const gApiKey = process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY;
+  if (gApiKey) {
+    try {
+      const gUrl = "https://routes.googleapis.com/directions/v2:computeRoutes";
+      const gRes = await fetchWithTimeout(
+        gUrl,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": gApiKey,
+            "X-Goog-FieldMask": "routes.duration,routes.distanceMeters,routes.description",
+          },
+          body: JSON.stringify({
+            origin: { location: { latLng: { latitude: fLat, longitude: fLng } } },
+            destination: { location: { latLng: { latitude: tLat, longitude: tLng } } },
+            travelMode: "DRIVE",
+            routingPreference: "TRAFFIC_AWARE",
+          }),
+        },
+        4000
+      );
+
+      if (gRes.ok) {
+        const gData = await gRes.json();
+        if (gData.routes && gData.routes.length > 0) {
+          const r = gData.routes[0];
+          const distKm = +(r.distanceMeters / 1000).toFixed(1);
+          const durSec = parseInt(r.duration?.replace("s", "") || "0", 10);
+          const durMins = Math.max(1, Math.round(durSec / 60));
+
+          return {
+            status: "success",
+            source: "google-routes",
+            distanceKm: distKm,
+            durationMins: durMins,
+            summary: r.description || "Google Maps Live Traffic Route",
+            fromCoords: [fLat, fLng],
+            toCoords: [tLat, tLng],
+            googleMapsDirUrl: `https://www.google.com/maps/dir/?api=1&origin=${fLat},${fLng}&destination=${tLat},${tLng}&travelmode=driving`,
+          };
+        }
+      }
+    } catch {
+      // Fall through to OSRM
+    }
+  }
+
+  // 2. Open Source Routing Machine (OSRM)
   try {
     const url = `https://router.project-osrm.org/route/v1/driving/${fLng},${fLat};${tLng},${tLat}?overview=full&geometries=geojson&steps=true`;
     const res = await fetchWithTimeout(url, {
@@ -981,12 +1031,35 @@ async function fetchOverpassVeterinaryClinics(lat, lng, radiusKm = 30) {
 }
 
 // Smart Geocoder: Maps any query (PESITM, town, district, hospital name, PIN code)
+// Uses Google Maps Geocoding API if key configured, falling back to local town coordinates & Nominatim
 async function geocodeLocationQuery(query) {
   if (!query || !query.trim()) return null;
   const raw = query.trim();
   const lower = raw.toLowerCase();
 
-  // 1. Instant check against comprehensive Indian & Karnataka towns
+  // 1. Google Maps Geocoding REST API (preferred for highest accuracy in India)
+  const gApiKey = process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY;
+  if (gApiKey) {
+    try {
+      const gUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(raw)}&key=${gApiKey}&components=country:IN`;
+      const gRes = await fetchWithTimeout(gUrl, {}, 3500);
+      if (gRes.ok) {
+        const gData = await gRes.json();
+        if (gData.status === "OK" && gData.results && gData.results.length > 0) {
+          const loc = gData.results[0].geometry.location;
+          return {
+            name: gData.results[0].formatted_address || raw,
+            lat: loc.lat,
+            lng: loc.lng,
+          };
+        }
+      }
+    } catch {
+      // Fall through to local database & Nominatim
+    }
+  }
+
+  // 2. Instant check against comprehensive Indian & Karnataka towns
   const townCoordinates = {
     "pesitm": { lat: 13.9785, lng: 75.5265, name: "PESITM Campus, Kotegangur, Shivamogga" },
     "kotegangur": { lat: 13.9785, lng: 75.5265, name: "Kotegangur, Shivamogga, Karnataka" },
@@ -1126,6 +1199,8 @@ async function findNearbyHospitals({
     // Real Google Maps direct turn-by-turn navigation URL with origin AND exact destination name & address
     const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${originLat},${originLng}&destination=${encodeURIComponent(hospital.name + ", " + hospital.address)}&travelmode=driving`;
     const googleMapsSearchUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(hospital.name + " " + hospital.address)}`;
+    const googleMapsEmbedUrl = `https://maps.google.com/maps?q=${hospital.latitude},${hospital.longitude}&t=m&z=15&output=embed`;
+    const googleMapsSatelliteEmbedUrl = `https://maps.google.com/maps?q=${hospital.latitude},${hospital.longitude}&t=k&z=15&output=embed`;
 
     return {
       ...hospital,
@@ -1134,6 +1209,8 @@ async function findNearbyHospitals({
       estimatedDrive,
       googleMapsUrl,
       googleMapsSearchUrl,
+      googleMapsEmbedUrl,
+      googleMapsSatelliteEmbedUrl,
     };
   });
 
