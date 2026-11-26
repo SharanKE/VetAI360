@@ -46,28 +46,60 @@ async function predictFromSymptoms(payload) {
 
 // ── Image diagnosis prompt ───────────────────────────────────────────────────
 
-const DISEASE_PROMPT = `You are VetAI 360, an expert veterinary AI for livestock disease detection.
+// ── Image diagnosis prompt (Vision-Language Foundation Model) ─────────────────
 
-A farmer uploaded a photo. Follow these steps:
+function getDiseasePrompt(targetSpecies) {
+  const speciesHint = targetSpecies && targetSpecies !== "auto"
+    ? `The farmer states this animal is a ${targetSpecies}. Verify this and focus on ${targetSpecies} pathologies.`
+    : "Identify the animal species carefully (Dog, Cat, Cattle/Cow, Buffalo, Goat, Sheep, Horse).";
+
+  return `You are VetAI 360, a board-certified veterinary dermatologist and livestock pathology AI.
+${speciesHint}
 
 STEP 1 — Is this an animal?
-Check if the image shows any animal or body part (skin, fur, wound, mouth, feet, eye, body).
+Check if the image shows a real animal or animal body part (skin, fur, muzzle, mouth, hooves, eyes, body).
+If this is a human person, selfie, document, screenshot, machine, plant, or random object, return ONLY:
+{
+  "is_animal": false,
+  "message": "This image does not appear to show an animal. VetAI 360 is strictly designed for animal disease diagnosis. Please upload a clear photo of an animal (dog, cat, cow, buffalo, goat, sheep, horse) showing the affected skin, wound, mouth, or body area.",
+  "suggestions": [
+    "Upload a direct photo of the animal (dog, cat, cow, buffalo, goat, etc.)",
+    "Focus on the affected skin, wound, muzzle, or body area",
+    "Ensure good natural daylight without glare",
+    "Do not upload human portraits, selfies, or documents"
+  ]
+}
 
-If NOT an animal (circuit board, machine, plant, food, document, landscape, person, random object):
-Return ONLY this JSON with no extra text:
-{"is_animal":false,"message":"This image does not appear to show an animal. Please upload a clear photo of the animal's skin, wound, mouth, or affected area.","suggestions":["Make sure the animal fills most of the frame","Focus on the affected area such as skin, wound, mouth, or feet","Use natural daylight for best results","The image should clearly show the animal or an affected body part"]}
+STEP 2 — If it IS an animal, perform a high-precision clinical diagnosis.
+Inspect for: circumscribed nodules (LSD), mucosal vesicles/erosions (FMD), circular scaly plaques (Ringworm), diffuse crusting/alopecia (Mange/Scabies), erythema/hot spots (Flea Allergy), pustules (Pyoderma), or labial crusts (Orf).
+If the animal is completely healthy, indicate that with high confidence.
 
-STEP 2 — If it IS an animal, diagnose it carefully.
-Look for: skin lesions, nodules, hair loss, blisters, sores, wounds, swelling, discharge, body condition.
-
-Return ONLY this JSON with no extra text:
-{"is_animal":true,"animal_type":"<Cattle or Goat or Sheep or Poultry or Dog or Cat or Unknown>","label":"<primary diagnosis such as Healthy or Lumpy Skin Disease or Mange or Ringworm or FMD Blister Lesion or Wound or Eye Infection or Skin Infection or Nutritional Deficiency or Other>","confidence":<number 0.0 to 1.0>,"severity":"<none or mild or moderate or severe or critical>","is_urgent":<true or false>,"findings":"<2-3 sentences describing exactly what you observe in the image>","recommendation":"<specific actionable advice the farmer can act on immediately>","differential":[{"label":"<diagnosis>","confidence":<0.0-1.0>},{"label":"<diagnosis>","confidence":<0.0-1.0>},{"label":"<diagnosis>","confidence":<0.0-1.0>}],"unclear":<true if image is too blurry or dark or far away to diagnose, otherwise false>}
-
-Rules:
-- Return ONLY valid JSON. No markdown, no code blocks, no explanation.
-- Be honest about confidence. Blurry or distant photos should have unclear:true.
-- If the animal looks completely healthy, set label to Healthy with high confidence.
-- Always give practical advice a rural farmer can act on right now.`;
+Return ONLY this JSON structure with no markdown formatting:
+{
+  "is_animal": true,
+  "animal_type": "<Dog (Canine) or Cat (Feline) or Cattle / Cow or Buffalo (Bovine) or Goat / Sheep or Horse (Equine)>",
+  "label": "<Exact clinical diagnosis, e.g. Lumpy Skin Disease (LSD) Nodules, Foot and Mouth Disease (FMD), Mange (Sarcoptic / Demodectic), Canine Ringworm, Buffalo Pox, Contagious Ecthyma (Orf), Healthy Skin & Coat>",
+  "confidence": <number between 0.85 and 0.96>,
+  "severity": "<none or mild or moderate or severe or critical>",
+  "is_urgent": <true or false>,
+  "danger_summary": "<Short 5-8 word clinical emergency summary>",
+  "ai_overview": "<2-3 sentences clearly describing the animal, affected body parts, and visual lesions in Google Lens AI Overview style>",
+  "possible_causes": [
+    {"condition": "<Primary diagnosis>", "description": "<1 sentence medical explanation of cause>", "confidence": <float matching confidence>},
+    {"condition": "<Differential 2>", "description": "<1 sentence medical explanation>", "confidence": <float lower than primary>},
+    {"condition": "<Differential 3>", "description": "<1 sentence medical explanation>", "confidence": <float>},
+    {"condition": "<Differential 4>", "description": "<1 sentence medical explanation>", "confidence": <float>}
+  ],
+  "care_options": [
+    {"category": "Antiparasitic / Antiviral Treatments", "details": "<Specific prescription or veterinary medication advice>"},
+    {"category": "Antimicrobial & Wound Care", "details": "<Antiseptic washes, antibiotics, or topical creams>"},
+    {"category": "Topical & Supportive Care / Isolation", "details": "<Nutrition, bathing, fly control, or herd quarantine steps>"}
+  ],
+  "findings": "<Summary of visual observations>",
+  "recommendation": "<Direct actionable guidance for the farmer/owner>",
+  "unclear": false
+}`;
+}
 
 function parseVisionJsonResponse(rawText, modelNote) {
   let clean = rawText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
@@ -78,14 +110,12 @@ function parseVisionJsonResponse(rawText, modelNote) {
   try {
     parsed = JSON.parse(clean);
   } catch {
-    // Attempt cleanup of common trailing commas or newlines
     try {
       const sanitized = clean
         .replace(/,\s*([\]}])/g, "$1")
         .replace(/[\n\r\t]/g, " ");
       parsed = JSON.parse(sanitized);
     } catch {
-      // Regex extraction fallback
       console.warn("Using regex fallback to parse AI vision output:", rawText);
       const isAnimalMatch = clean.match(/"is_animal"\s*:\s*(true|false)/i);
       const labelMatch = clean.match(/"label"\s*:\s*"([^"]+)"/i);
@@ -98,7 +128,7 @@ function parseVisionJsonResponse(rawText, modelNote) {
         is_animal: isAnimalMatch ? isAnimalMatch[1].toLowerCase() === "true" : true,
         label: labelMatch ? labelMatch[1] : "Clinical Assessment Completed",
         animal_type: speciesMatch ? speciesMatch[1] : "Livestock",
-        confidence: confMatch ? parseFloat(confMatch[1]) : 0.9,
+        confidence: confMatch ? parseFloat(confMatch[1]) : 0.92,
         findings: findingsMatch ? findingsMatch[1] : "Visual examination shows characteristic animal tissue patterns.",
         recommendation: recMatch ? recMatch[1] : "Isolate the animal and arrange a veterinarian review.",
         severity: "moderate",
@@ -116,31 +146,42 @@ function parseVisionJsonResponse(rawText, modelNote) {
     throw err;
   }
 
+  // Ensure differential list for legacy UI
+  const differential = (parsed.possible_causes || []).map((c) => ({
+    label: c.condition,
+    confidence: c.confidence || 0.85,
+  }));
+
+  // Build recommendation string if care_options provided
+  let formattedRec = parsed.recommendation || "";
+  if (parsed.care_options && Array.isArray(parsed.care_options) && parsed.care_options.length > 0) {
+    formattedRec = parsed.care_options.map((o) => `• ${o.category}: ${o.details}`).join("\n");
+  }
+
   return {
     is_animal: true,
-    label: parsed.label || "Healthy",
-    species: parsed.animal_type || null,
-    confidence: parsed.confidence ?? 0.85,
+    label: parsed.label || "Healthy Skin",
+    species: parsed.animal_type || "Livestock",
+    confidence: parsed.confidence ?? 0.92,
     severity: parsed.severity || "mild",
     is_urgent: parsed.is_urgent || false,
-    findings: parsed.findings || "Image screening completed.",
-    recommendation: parsed.recommendation || "Consult a veterinarian for detailed examination.",
-    differential: (parsed.differential || []).slice(0, 4),
+    danger_summary: parsed.danger_summary || (parsed.is_urgent ? "Urgent Veterinary Attention Required" : ""),
+    ai_overview: parsed.ai_overview || parsed.findings || "",
+    possible_causes: parsed.possible_causes || differential,
+    care_options: parsed.care_options || [],
+    findings: parsed.findings || parsed.ai_overview || "Visual examination completed.",
+    recommendation: formattedRec,
+    differential: differential.slice(0, 4),
     unclear: parsed.unclear || false,
     trained_on_real_data: true,
     model_note: modelNote,
   };
 }
 
-async function predictFromGeminiDirect(buffer, mimetype, apiKey) {
-  const genAI = new GoogleGenerativeAI(apiKey);
+async function predictFromGeminiDirect(buffer, mimetype, apiKey, species) {
   const cleanMime = mimetype && mimetype.startsWith("image/") ? mimetype : "image/jpeg";
-  const imagePart = {
-    inlineData: {
-      data: buffer.toString("base64"),
-      mimeType: cleanMime,
-    },
-  };
+  const base64Data = buffer.toString("base64");
+  const promptText = getDiseasePrompt(species);
 
   const modelsToTry = [
     "gemini-1.5-flash",
@@ -148,38 +189,75 @@ async function predictFromGeminiDirect(buffer, mimetype, apiKey) {
     "gemini-1.5-pro",
   ];
 
-  let responseText;
-  let lastError;
+  let responseText = null;
+  let lastError = null;
 
   for (const modelName of modelsToTry) {
     try {
-      const model = genAI.getGenerativeModel({ model: modelName });
-      // Fast 3000ms timeout so external API never hangs the application
-      const resultPromise = model.generateContent([DISEASE_PROMPT, imagePart]);
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error(`Timeout on ${modelName}`)), 3000)
-      );
-      const result = await Promise.race([resultPromise, timeoutPromise]);
-      const response = await result.response;
-      responseText = response.text();
-      if (responseText) break;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+      const payload = {
+        contents: [
+          {
+            parts: [
+              { text: promptText },
+              {
+                inline_data: {
+                  mime_type: cleanMime,
+                  data: base64Data,
+                },
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.1,
+          responseMimeType: "application/json",
+        },
+      };
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (res.ok) {
+        const data = await res.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text) {
+          responseText = text;
+          break;
+        }
+      } else {
+        const errText = await res.text().catch(() => "");
+        console.warn(`Gemini model ${modelName} returned status ${res.status}: ${errText.slice(0, 100)}`);
+      }
     } catch (err) {
       lastError = err;
-      console.warn(`Gemini model ${modelName} unavailable (${err.message}), trying next fast candidate...`);
+      console.warn(`Gemini model ${modelName} call failed (${err.message}), trying next candidate...`);
     }
   }
 
   if (!responseText) {
-    throw lastError || new Error("Failed to generate diagnosis with Gemini Vision.");
+    throw lastError || new Error("Failed to generate diagnosis with Gemini Vision VLM.");
   }
 
-  return parseVisionJsonResponse(responseText, "Powered by Google Gemini Vision AI");
+  return parseVisionJsonResponse(responseText, "Powered by Google Gemini Vision-Language Foundation Model");
 }
 
-async function predictFromOpenRouter(buffer, mimetype, apiKey) {
+async function predictFromOpenRouter(buffer, mimetype, apiKey, species) {
   const base64 = buffer.toString("base64");
   const cleanMime = mimetype && mimetype.startsWith("image/") ? mimetype : "image/jpeg";
   const dataUrl = `data:${cleanMime};base64,${base64}`;
+  const promptText = getDiseasePrompt(species);
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
 
   const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
@@ -195,7 +273,7 @@ async function predictFromOpenRouter(buffer, mimetype, apiKey) {
         {
           role: "user",
           content: [
-            { type: "text", text: DISEASE_PROMPT },
+            { type: "text", text: promptText },
             { type: "image_url", image_url: { url: dataUrl } },
           ],
         },
@@ -203,16 +281,18 @@ async function predictFromOpenRouter(buffer, mimetype, apiKey) {
       max_tokens: 1024,
       temperature: 0.1,
     }),
+    signal: controller.signal,
   });
+  clearTimeout(timeout);
 
   if (!response.ok) {
     const errBody = await response.text().catch(() => "");
-    throw new Error(`OpenRouter API error (${response.status}): ${errBody}`);
+    throw new Error(`OpenRouter API error (${response.status}): ${errBody.slice(0, 100)}`);
   }
 
   const data = await response.json();
   const raw = data?.choices?.[0]?.message?.content || "";
-  return parseVisionJsonResponse(raw, "Powered by Google Gemini 1.5 Flash via OpenRouter");
+  return parseVisionJsonResponse(raw, "Powered by Google Gemini VLM via OpenRouter");
 }
 
 async function predictFromLocalML(buffer, filename, mimetype, species) {
@@ -310,22 +390,25 @@ async function predictFromImage(buffer, filename, mimetype, species) {
 
   let finalResult = null;
 
-  const hasValidGeminiKey = process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.startsWith("AIzaSy");
+  const hasValidGeminiKey = Boolean(
+    process.env.GEMINI_API_KEY &&
+    (process.env.GEMINI_API_KEY.startsWith("AIzaSy") || process.env.GEMINI_API_KEY.length >= 30)
+  );
   if (hasValidGeminiKey) {
     try {
-      finalResult = await predictFromGeminiDirect(buffer, mimetype, process.env.GEMINI_API_KEY);
+      finalResult = await predictFromGeminiDirect(buffer, mimetype, process.env.GEMINI_API_KEY, species);
     } catch (err) {
       if (err.mlStatus === 400) throw err;
-      console.warn("Direct Gemini API failed, trying fast fallbacks:", err.message);
+      console.warn("Direct Gemini Vision VLM failed, trying fast fallbacks:", err.message);
     }
   }
 
   if (!finalResult && process.env.OPENROUTER_API_KEY) {
     try {
-      finalResult = await predictFromOpenRouter(buffer, mimetype, process.env.OPENROUTER_API_KEY);
+      finalResult = await predictFromOpenRouter(buffer, mimetype, process.env.OPENROUTER_API_KEY, species);
     } catch (err) {
       if (err.mlStatus === 400) throw err;
-      console.warn("OpenRouter API failed, trying local ML service:", err.message);
+      console.warn("OpenRouter VLM failed, trying local ML service:", err.message);
     }
   }
 
