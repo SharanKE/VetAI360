@@ -31,19 +31,36 @@ function ConfidenceBar({ label, confidence, isTop }) {
 }
 
 export default function ImageDiagnosis() {
-  const [animals, setAnimals]   = useState([]);
-  const [animalId, setAnimalId] = useState("");
-  const [file, setFile]         = useState(null);
-  const [preview, setPreview]   = useState(null);
-  const [result, setResult]     = useState(null);
-  const [error, setError]       = useState("");
-  const [loading, setLoading]   = useState(false);
-  const [dragging, setDragging] = useState(false);
+  const [animals, setAnimals]         = useState([]);
+  const [animalId, setAnimalId]       = useState("");
+  const [selectedSpecies, setSelectedSpecies] = useState("auto");
+  const [file, setFile]               = useState(null);
+  const [preview, setPreview]         = useState(null);
+  const [result, setResult]           = useState(null);
+  const [error, setError]             = useState("");
+  const [loading, setLoading]         = useState(false);
+  const [dragging, setDragging]       = useState(false);
   const inputRef = useRef(null);
 
   useEffect(() => {
     client.get("/animals").then((res) => setAnimals(res.data.animals || [])).catch(() => {});
   }, []);
+
+  function handleAnimalChange(id) {
+    setAnimalId(id);
+    if (id) {
+      const selected = animals.find((a) => String(a.id) === String(id));
+      if (selected && selected.species) {
+        const s = selected.species.toLowerCase();
+        if (s.includes("dog") || s.includes("canine")) setSelectedSpecies("dog");
+        else if (s.includes("cat") || s.includes("feline")) setSelectedSpecies("cat");
+        else if (s.includes("buffalo") || s.includes("buffelow")) setSelectedSpecies("buffalo");
+        else if (s.includes("cow") || s.includes("cattle") || s.includes("bovine")) setSelectedSpecies("cow");
+        else if (s.includes("goat") || s.includes("sheep") || s.includes("caprine") || s.includes("ovine")) setSelectedSpecies("goat");
+        else if (s.includes("horse") || s.includes("equine")) setSelectedSpecies("horse");
+      }
+    }
+  }
 
   function applyFile(f) {
     if (!f || !f.type.startsWith("image/")) { setError("Please select an image file (JPG, PNG, etc.)."); return; }
@@ -70,6 +87,9 @@ export default function ImageDiagnosis() {
     const formData = new FormData();
     formData.append("image", file);
     if (animalId) formData.append("animalId", animalId);
+    if (selectedSpecies && selectedSpecies !== "auto") {
+      formData.append("species", selectedSpecies);
+    }
     try {
       const res = await client.post("/predict/image", formData, {
         headers: { "Content-Type": "multipart/form-data" },
@@ -110,13 +130,49 @@ export default function ImageDiagnosis() {
             <Select
               label="Link result to an animal (optional)"
               value={animalId}
-              onChange={(e) => setAnimalId(e.target.value)}
+              onChange={(e) => handleAnimalChange(e.target.value)}
             >
               <option value="">— Don't save to a record —</option>
               {animals.map((a) => (
                 <option key={a.id} value={a.id}>{a.name} ({a.species})</option>
               ))}
             </Select>
+
+            {/* Target Animal Species Selection Bar */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  Target Animal Species
+                </label>
+                <span className="text-[11px] text-pasture-700 font-bold bg-pasture-50 px-2 py-0.5 rounded-full border border-pasture-200">
+                  {selectedSpecies === "auto" ? "🔍 Auto-Detect from Photo" : `Selected: ${selectedSpecies.toUpperCase()}`}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                {[
+                  { id: "auto", label: "Auto-Detect", icon: "🔍" },
+                  { id: "dog", label: "Dog", icon: "🐕" },
+                  { id: "cat", label: "Cat", icon: "🐈" },
+                  { id: "cow", label: "Cow / Cattle", icon: "🐄" },
+                  { id: "buffalo", label: "Buffalo", icon: "🐃" },
+                  { id: "goat", label: "Goat / Sheep", icon: "🐐" },
+                ].map((sp) => (
+                  <button
+                    key={sp.id}
+                    type="button"
+                    onClick={() => setSelectedSpecies(sp.id)}
+                    className={`flex flex-col items-center justify-center py-2 px-1 rounded-xl text-xs font-semibold border transition ${
+                      selectedSpecies === sp.id
+                        ? "border-pasture-600 bg-pasture-50 text-pasture-900 shadow-sm ring-2 ring-pasture-400"
+                        : "border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50/80"
+                    }`}
+                  >
+                    <span className="text-lg mb-0.5">{sp.icon}</span>
+                    <span className="text-[11px] font-bold">{sp.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
 
             {/* Drop zone */}
             <div
@@ -227,7 +283,12 @@ export default function ImageDiagnosis() {
                         <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Detected condition</p>
                         <p className="mt-0.5 text-lg font-bold text-gray-900 leading-tight">{result.label}</p>
                         {result.species && (
-                          <p className="mt-0.5 text-xs text-gray-500">Animal: <span className="font-medium">{result.species}</span></p>
+                          <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                            <span className="inline-flex items-center gap-1 rounded-md bg-pasture-100 px-2.5 py-0.5 text-xs font-bold text-pasture-800 border border-pasture-300">
+                              🐾 {result.species}
+                            </span>
+                            <span className="text-[11px] text-gray-400 font-medium">Species Targeted</span>
+                          </div>
                         )}
                         <span className={`mt-2 inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${sev.badge}`}>
                           {sev.label}

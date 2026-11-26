@@ -294,7 +294,12 @@ async function predictFromImage(buffer, filename, mimetype, species) {
   // 1. Fast Cache Check (< 1ms)
   let imgHash = null;
   try {
-    imgHash = crypto.createHash("md5").update(buffer).digest("hex");
+    imgHash = crypto
+      .createHash("md5")
+      .update(buffer)
+      .update(species || "auto")
+      .update(filename || "")
+      .digest("hex");
     if (IMAGE_CACHE.has(imgHash)) {
       const cached = IMAGE_CACHE.get(imgHash);
       return { ...cached, cached: true };

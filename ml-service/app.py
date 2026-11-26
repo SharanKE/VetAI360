@@ -309,11 +309,14 @@ def predict_image():
         return jsonify({"error": "Attach a file under the field name 'image'."}), 400
 
     file = request.files["image"]
+    filename = request.form.get("filename") or getattr(file, "filename", "") or ""
+    known_species = request.form.get("species") or None
     try:
         img_bytes = file.read()
-        img_hash = hashlib.md5(img_bytes).hexdigest()
-        if img_hash in _IMAGE_CACHE:
-            cached_res = dict(_IMAGE_CACHE[img_hash])
+        raw_hash = hashlib.md5(img_bytes).hexdigest()
+        cache_key = f"{raw_hash}_{known_species or 'auto'}"
+        if cache_key in _IMAGE_CACHE:
+            cached_res = dict(_IMAGE_CACHE[cache_key])
             cached_res["cached"] = True
             if not cached_res.get("is_animal", True):
                 return jsonify(cached_res), 400
@@ -323,18 +326,16 @@ def predict_image():
         return jsonify({"error": "Could not read that file as an image."}), 400
 
     # ── Step 1: Human / Non-animal gatekeeper & lesion analysis ───────────────
-    filename = request.form.get("filename") or getattr(file, "filename", "") or ""
-    known_species = request.form.get("species") or None
     res_body = analyze_uploaded_image(pil_img, filename=filename, known_species=known_species)
 
     # If the image was rejected (human face, portrait, screenshot, document)
     if not res_body.get("is_animal", True):
         if len(_IMAGE_CACHE) < 200:
-            _IMAGE_CACHE[img_hash] = res_body
+            _IMAGE_CACHE[cache_key] = res_body
         return jsonify(res_body), 400
 
     if len(_IMAGE_CACHE) < 200:
-        _IMAGE_CACHE[img_hash] = res_body
+        _IMAGE_CACHE[cache_key] = res_body
 
     return jsonify(res_body), 200
 

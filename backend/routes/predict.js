@@ -77,11 +77,11 @@ router.post("/image", async (req, res) => {
   if (!req.files || !req.files.image) {
     return res.status(400).json({ error: "Attach an image file under the field name 'image'." });
   }
-  const { animalId } = req.body;
+  const { animalId, species, animal_type } = req.body;
   const file = req.files.image;
 
-  let knownSpecies = null;
-  if (animalId) {
+  let knownSpecies = species || animal_type || null;
+  if (!knownSpecies && animalId) {
     const animal = await Promise.resolve(Animal.findById(animalId));
     if (animal && animal.species) {
       knownSpecies = animal.species;
